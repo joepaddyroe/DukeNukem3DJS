@@ -1,6 +1,7 @@
 /**
  * ENGINE.C grouscan + JFBuild a-c.c slopevlin subset.
  * Sloped floor/ceiling column UV via depth recip (krecipasm).
+ * Distance fog via getpalookup (ENGINE.C slopalookup shade cache math).
  */
 import {
   dmulscale9,
@@ -8,13 +9,16 @@ import {
   dmulscale17,
   dmulscale25,
   krecipasm,
+  mulscale4,
   mulscale10,
   mulscale12,
+  mulscale13,
   mulscale14,
   mulscale16,
   mulscale19,
   mulscale20,
   mulscale21,
+  mulscale24,
   mulscale27,
   mulscale28,
   nsqrtasm,
@@ -24,6 +28,9 @@ import { getzsofslope } from '../engine/SectorQuery.js';
 
 /** ENGINE.C BITSOFPRECISION — keep in sync with slopevlin step. */
 const BITSOFPRECISION = 3;
+
+/** Typical Build/Duke visibility when game not wired. */
+const DEFAULT_VISIBILITY = 512;
 
 /**
  * @param {number} a
@@ -36,8 +43,20 @@ function shiftSigned(a, s) {
 }
 
 /**
+ * ENGINE.C getpalookup
+ * @param {number} davis
+ * @param {number} dashade
+ * @param {number} numShades
+ */
+function getpalookup(davis, dashade, numShades) {
+  const s = (dashade | 0) + ((davis | 0) >> 8);
+  if (s < 0) return 0;
+  if (s >= numShades) return numShades - 1;
+  return s;
+}
+
+/**
  * ENGINE.C grouscan (dastat 0=ceil, 1=floor).
- * Constant shade (no slopalookup / distance fog yet).
  *
  * @param {object} opts
  * @param {number} opts.dax1
@@ -55,7 +74,11 @@ function shiftSigned(a, s) {
  * @param {number} opts.xdimenrecip
  * @param {number} opts.viewingrangerecip
  * @param {number} opts.xdimscale
+ * @param {number} opts.xdimenscale
  * @param {number} opts.halfxdimen
+ * @param {number} [opts.visibility]
+ * @param {number} opts.globalshade  sector floor/ceiling shade
+ * @param {number} opts.numShades
  * @param {Int16Array} opts.umost
  * @param {Int16Array} opts.dmost
  * @param {Int16Array} opts.uplc
@@ -65,7 +88,6 @@ function shiftSigned(a, s) {
  * @param {number} opts.windowx1
  * @param {number} opts.windowy1
  * @param {Uint8Array} opts.tables  palookup tables
- * @param {number} opts.shadeOffset
  */
 export function grouscan(opts) {
   const {
@@ -84,6 +106,7 @@ export function grouscan(opts) {
     xdimenrecip,
     viewingrangerecip,
     xdimscale,
+    xdimenscale,
     halfxdimen,
     umost,
     dmost,
@@ -94,7 +117,8 @@ export function grouscan(opts) {
     windowx1,
     windowy1,
     tables,
-    shadeOffset,
+    numShades,
+    globalshade,
   } = opts;
 
   const sec = board.sectors[sectnum];
@@ -235,6 +259,21 @@ export function grouscan(opts) {
     globaly1 = (globaly1 + ((sec.floorypanning & 255) << 24)) | 0;
   }
 
+  // ENGINE.C drawrooms: globalvisibility = mulscale16(visibility, mulscale16(xdimenscale, viewingrangerecip))
+  const visibility = opts.visibility ?? DEFAULT_VISIBILITY;
+  let globvis = mulscale16(
+    visibility,
+    mulscale16(xdimenscale | 0, viewingrangerecip),
+  );
+  if (sec.visibility !== 0) {
+    globvis = mulscale4(globvis, (sec.visibility + 16) & 255);
+  }
+  globvis = mulscale13(globvis, daz);
+  globvis = mulscale16(globvis, xdimscale);
+
+  const dashade = globalshade | 0;
+  const shades = Math.max(1, numShades | 0);
+
   // JFBuild a-c.c: bzinc = asm1>>3; asm1 = -(globalzd>>(16-BITSOFPRECISION))
   const asm1 = -(globalzd >> (16 - BITSOFPRECISION)) | 0;
   const bzinc = (asm1 >> 3) | 0;
@@ -257,15 +296,15 @@ export function grouscan(opts) {
     if (y1 <= y2) {
       const globalx3 = (globalx2 >> 10) | 0;
       const globaly3 = (globaly2 >> 10) | 0;
-      // ENGINE.C: asm3 = mulscale16(y2,globalzd)+(globalzx>>6)
       let bz = (mulscale16(y2, globalzd) + (globalzx >> 6)) | 0;
       const screenX = (windowx1 + x) | 0;
       let p = (ylookup[(y2 + windowy1) | 0] + screenX) | 0;
       let cnt = (y2 - y1 + 1) | 0;
       const bx = globalx1 | 0;
       const by = globaly1 | 0;
+      let y = y2;
 
-      // slopevlin subset (JFBuild a-c.c + our krecipasm)
+      // slopevlin + slopalookup shade (per-row getpalookup)
       while (cnt-- > 0) {
         const recip = krecipasm(bz >> 6);
         bz = (bz + bzinc) | 0;
@@ -273,9 +312,15 @@ export function grouscan(opts) {
         const v = (by + Math.imul(globaly3, recip)) >>> 0;
         const idx = ((u >>> xBits) << glogy) + (v >>> yBits);
         if (idx >= 0 && idx < gbuf.length) {
-          pixels[p] = tables[shadeOffset + (gbuf[idx] & 255)];
+          // ENGINE.C: getpalookup(mulscale24(krecipasm(m),globvis), shade)
+          // m ≈ mulscale16(y,globalzd)+(globalzx>>6)
+          const m = (mulscale16(y, globalzd) + (globalzx >> 6)) | 0;
+          const davis = mulscale24(krecipasm(m), globvis);
+          const shadeOff = getpalookup(davis, dashade, shades) << 8;
+          pixels[p] = tables[shadeOff + (gbuf[idx] & 255)];
         }
         p = (p + pinc) | 0;
+        y--;
       }
     }
 

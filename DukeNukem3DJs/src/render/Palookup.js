@@ -54,4 +54,17 @@ export class Palookup {
     const s = Math.max(0, Math.min(this.numShades - 1, shade | 0));
     return s * 256;
   }
+
+  /**
+   * ENGINE.C getpalookup — clamp shade + distance fog.
+   * @param {number} davis
+   * @param {number} dashade
+   * @returns {number}
+   */
+  getpalookup(davis, dashade) {
+    return Math.min(
+      Math.max((dashade | 0) + ((davis | 0) >> 8), 0),
+      this.numShades - 1,
+    );
+  }
 }

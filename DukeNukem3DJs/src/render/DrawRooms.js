@@ -1037,10 +1037,6 @@ export class DrawRooms {
     const xdimenrecip = divscale32(1, Math.max(1, buffer.xdimen));
 
     if (drawCeil && this._ceilSlope) {
-      const shade = Math.min(
-        this.renderer.palookup.numShades - 1,
-        Math.max(0, sec.ceilingshade | 0),
-      );
       grouscan({
         dax1: x1,
         dax2: x2,
@@ -1057,7 +1053,10 @@ export class DrawRooms {
         xdimenrecip,
         viewingrangerecip: buffer.viewingrangerecip ?? 65536,
         xdimscale: this.xdimscale,
+        xdimenscale: this.xdimenscale,
         halfxdimen: buffer.halfxdimen,
+        globalshade: sec.ceilingshade | 0,
+        numShades: this.renderer.palookup.numShades,
         umost: this.umost,
         dmost: this.dmost,
         uplc: this.uplc,
@@ -1067,15 +1066,10 @@ export class DrawRooms {
         windowx1: buffer.windowx1,
         windowy1: buffer.windowy1,
         tables: this.renderer.palookup.tables,
-        shadeOffset: this.renderer.palookup.shadeOffset(shade),
       });
     }
 
     if (drawFlor && this._florSlope) {
-      const shade = Math.min(
-        this.renderer.palookup.numShades - 1,
-        Math.max(0, sec.floorshade | 0),
-      );
       grouscan({
         dax1: x1,
         dax2: x2,
@@ -1092,7 +1086,10 @@ export class DrawRooms {
         xdimenrecip,
         viewingrangerecip: buffer.viewingrangerecip ?? 65536,
         xdimscale: this.xdimscale,
+        xdimenscale: this.xdimenscale,
         halfxdimen: buffer.halfxdimen,
+        globalshade: sec.floorshade | 0,
+        numShades: this.renderer.palookup.numShades,
         umost: this.umost,
         dmost: this.dmost,
         uplc: this.uplc,
@@ -1102,7 +1099,6 @@ export class DrawRooms {
         windowx1: buffer.windowx1,
         windowy1: buffer.windowy1,
         tables: this.renderer.palookup.tables,
-        shadeOffset: this.renderer.palookup.shadeOffset(shade),
       });
     }
 
