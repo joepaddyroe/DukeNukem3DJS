@@ -8,11 +8,13 @@
  * @property {number} x Absolute screen column
  * @property {number} y1 Top row (inclusive)
  * @property {number} y2 Bottom row (inclusive)
- * @property {number} vplc Texture V in 16.16 fixed (starting)
- * @property {number} vinc Texture V step per pixel (16.16)
+ * @property {number} vplc Texture V fixed-point start
+ * @property {number} vinc Texture V step per pixel
  * @property {Uint8Array} texcol One texture column (column-major ART style)
  * @property {number} texHeight Height of texcol (wrap mask = height-1 if power of two)
  * @property {number} shadeOffset Offset into palookup.tables (shade * 256)
+ * @property {number} [vShift=16] Bits to shift vplc for texel index — wallscan uses
+ *   globalshiftval (32-log2(ysiz)), not 16. Demo stretch paths use 16.
  */
 
 /**
@@ -78,6 +80,8 @@ export class VlineDrawer {
 
     let vplc = params.vplc | 0;
     const vinc = params.vinc | 0;
+    // wallscan: setupvlineasm(globalshiftval); texel = vplc >> glogy
+    const vShift = params.vShift != null ? params.vShift | 0 : 16;
     const tables = this.palookup.tables;
     const mask = texHeight - 1;
     const powerOfTwo = (texHeight & mask) === 0;
@@ -92,14 +96,14 @@ export class VlineDrawer {
 
     if (powerOfTwo) {
       for (let y = top; y <= bot; y++) {
-        const texel = texcol[(vplc >>> 16) & mask];
+        const texel = texcol[(vplc >>> vShift) & mask];
         pixels[dest] = tables[shadeBase + texel];
         dest += bytesperline;
         vplc = (vplc + vinc) | 0;
       }
     } else {
       for (let y = top; y <= bot; y++) {
-        let v = (vplc >>> 16) % texHeight;
+        let v = (vplc >>> vShift) % texHeight;
         if (v < 0) v += texHeight;
         const texel = texcol[v];
         pixels[dest] = tables[shadeBase + texel];

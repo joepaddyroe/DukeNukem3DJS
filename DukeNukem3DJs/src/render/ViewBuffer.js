@@ -1,4 +1,5 @@
 import { SCREENWIDTH, SCREENHEIGHT } from '../core/renderConstants.js';
+import { divscale16, divscale32, scale } from '../math/fixed.js';
 
 /**
  * Indexed framebuffer with Build-style ylookup / setview window.
@@ -30,6 +31,14 @@ export class ViewBuffer {
     this.xdimen = screenWidth;
     this.ydimen = screenHeight;
     this.halfxdimen = (screenWidth / 2) | 0;
+
+    /** ENGINE.C setaspect state */
+    this.viewingrange = 65536;
+    this.yxaspect = 65536;
+    this.xyaspect = 65536;
+    this.xdimenscale = 65536;
+    this.xdimscale = 65536;
+    this.viewingrangerecip = 65536;
 
     this._rebuildYlookup();
     this.setview(0, 0, screenWidth - 1, screenHeight - 1);
@@ -73,6 +82,22 @@ export class ViewBuffer {
     this.xdimen = this.windowx2 - this.windowx1 + 1;
     this.ydimen = this.windowy2 - this.windowy1 + 1;
     this.halfxdimen = (this.xdimen / 2) | 0;
+    // ENGINE.C setview → setaspect(65536, divscale16(ydim*320, xdim*200))
+    this.setaspect(65536, divscale16(this.ydim * 320, this.xdim * 200));
+  }
+
+  /**
+   * ENGINE.C setaspect(daxrange, daaspect).
+   * @param {number} daxrange viewingrange (65536 = classic ~90°)
+   * @param {number} daaspect yxaspect
+   */
+  setaspect(daxrange, daaspect) {
+    this.viewingrange = daxrange | 0;
+    this.yxaspect = daaspect | 0;
+    this.viewingrangerecip = divscale32(1, this.viewingrange);
+    this.xyaspect = divscale32(1, this.yxaspect);
+    this.xdimenscale = scale(this.xdimen, this.yxaspect, 320);
+    this.xdimscale = scale(320, this.xyaspect, this.xdimen);
   }
 
   /**

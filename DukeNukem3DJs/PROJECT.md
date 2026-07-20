@@ -31,20 +31,20 @@ If you are picking up this project with no chat history:
 4. Respect **§2–3** (SOLID + layers) before editing.
 5. After completing work, update **§12**, **§7**, and **§15 Changelog**.
 
-**Current maturity (2026-07-20):** GRP + ART + palette loading wired; software vline path draws a **demo room using real ART tiles** and `palette.dat` / palookup. Still **no** Build `drawrooms` / board load / gameplay.
+**Current maturity (2026-07-20):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`** (`scansector` / `drawalls` front-to-back). Face/wall **`drawmasks`**. **`clipmove`** wall collision. 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
 | Priority | Task | Status |
 |----------|------|--------|
-| **P0** | Canvas shell + `GameLoop` + `CanvasVideoOutput` | Done |
-| **P0** | Software renderer primitives | Done |
-| **P1** | `GrpFile` / `GroupFileSystem` | Done |
-| **P1** | ART `loadpics` / `loadtile` + `palette.dat` | Done |
-| **P1** | Board (`.map`) load — sectors / walls / sprites | Not started |
-| **P2** | Build `drawrooms` / `drawmasks` | Not started |
-| **P2** | Player movement + `clipmove` | Not started |
-| **P3** | Duke game loop / actors / CON | Not started |
+| **P0** | Canvas shell + software primitives | Done |
+| **P1** | GRP / ART / palette | Done |
+| **P1** | `loadboard` (E1L1) | Done |
+| **P2** | `drawrooms` walls + portals | Partial — bunch/`scansector`/`drawalls` port; wallmost approx |
+| **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align; slope approx) |
+| **P2** | Parallax sky (`parascan`) | Partial (single-tile cylindrical) |
+| **P2** | `drawmasks` sprites | Partial (face + wall sprites) |
+| **P2** | Player movement + `clipmove` | Partial (`clipmove` walls; no pushmove/sprites) |
 
 ---
 
@@ -147,11 +147,13 @@ DukeNukem3DJs/
 │   │   ├── ViewBuffer.js       # frameplace / ylookup / setview
 │   │   ├── VlineDrawer.js      # vlineasm1
 │   │   ├── HlineDrawer.js      # solid spans
+│   │   ├── FlatPlane.js        # flat ceilscan/florscan UV
+│   │   ├── DrawRooms.js        # portal drawrooms subset
 │   │   ├── Palookup.js         # shade tables
 │   │   └── DemoRoomRenderer.js # TEMP scaffolding only — not Build drawrooms
 │   ├── audio/                  # SFX / music (later)
 │   ├── ui/                     # Menus (later)
-│   └── platform/               # CanvasVideoOutput, keyboard, mouse
+│   └── platform/               # CanvasVideoOutput, Keyboard, …
 └── assets/                     # Optional GRP (often gitignored; user-supplied)
 ```
 
@@ -211,23 +213,24 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started
 - [ ] CON stubs optional later
 
 ### Phase 2 — Map / engine world
-- [ ] `BoardLoader` — `loadboard` sector/wall/sprite arrays
-- [ ] Sector / wall / sprite types matching `BUILD.H`
-- [ ] `updatesector`, basic spatial queries
+- [x] `BoardLoader` — `loadboard` sector/wall/sprite arrays (map v7)
+- [x] Sector / wall / sprite types matching `BUILD.H`
+- [x] `updatesector` / `inside` (`SectorQuery.js`)
+- [ ] Full `clipmove` / `getzrange`
 
 ### Phase 3 — Render (Build software)
-- [x] `ViewBuffer` — frameplace, ylookup, setview, clearview
-- [x] `VlineDrawer` — textured vertical columns (vlineasm1)
-- [x] `HlineDrawer` — solid spans / ceiling-floor fill
-- [x] `Palookup` — from `palette.dat` (32 shades)
-- [x] Demo box room using **real ART** columns (scaffold only)
-- [x] Framebuffer wired to real game palette from ART/GRP
-- [ ] `drawrooms` wall/floor/ceiling columns
+- [x] `ViewBuffer` / `VlineDrawer` / `HlineDrawer` / `Palookup`
+- [x] Real palette + ART columns
+- [x] `DrawRooms` portal subset — solid + step walls, umost/dmost (E1L1)
+- [x] Flat `ceilscan`/`florscan` UV subset (`FlatPlane.js`) — skip slope/parallax
+- [x] 4:3 CRT-aspect present (`CanvasVideoOutput`)
+- [ ] Full bunch/`scansector` parity with `ENGINE.C`
+- [ ] Parallax skies (`parascan`) / slopes (`grouscan`)
 - [ ] `drawmasks` sprites / masked walls
-- [ ] Sky / parallax floors (later)
 
 ### Phase 4 — Play simulation
-- [ ] Player spawn from board
+- [x] Player spawn from board (APLAYER / map header)
+- [x] WASD + turn look (no collision)
 - [ ] `clipmove` / `getzrange` / movement
 - [ ] Weapons, inventory, damage (Duke game)
 - [ ] Actors (`ACTORS.C`), sector effects (`SECTOR.C`)
@@ -255,31 +258,26 @@ Last audited: **2026-07-20**. Re-audit after major features.
 
 ```
 Shell / canvas      ██████████  100%
-Pixel path          ████████░░   ~80%   vline/hline/setview
-GRP / ART / palette █████████░   ~90%   loadpics+loadtile+palette.dat
-Board load          ░░░░░░░░░░    0%
-Build drawrooms     ██░░░░░░░░   ~20%   primitives + ART demo only
-Player / clipmove   ░░░░░░░░░░    0%
-Actors / CON        ░░░░░░░░░░    0%
-Audio               ░░░░░░░░░░    0%
-UI / menus          ░░░░░░░░░░    0%
+GRP / ART / palette █████████░   ~90%
+Board load          ████████░░   ~85%   E1L1 + updatesector/inside
+Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
+Player / clipmove   █████░░░░░   ~45%   clipmove walls; no pushmove
+drawmasks sprites   ████░░░░░░   ~40%   face + wall sprites; system pics filtered
 ```
 
 ### 12.2 Done well
 
 | Area | Key files | Notes |
 |------|-----------|-------|
-| Bootstrap | `index.html`, `main.js` | Loads `assets/DUKE3D.GRP` |
-| GRP | `grp/GrpFile.js`, `GroupFileSystem.js` | KenSilverman archive + disk-first |
-| ART | `grp/ArtTiles.js` | `loadpics` / `loadtile`, column-major |
-| Palette | `grp/BuildPalette.js` | VGA→RGB888, palookup×32 |
-| View buffer | `ViewBuffer.js` | ylookup, setview, clearview |
-| Columns | `VlineDrawer.js` | Textured vline + real palookup |
-| Demo | `DemoRoomRenderer.js` | Scaffold with real ART (not drawrooms) |
+| GRP/ART/palette | `grp/*` | From `DUKE3D.GRP` |
+| Map load | `engine/BoardLoader.js`, `SectorQuery.js` | Map v7 `E1L1.MAP`, APLAYER spawn, `getzsofslope` |
+| drawrooms | `render/DrawRooms.js`, `FlatPlane.js` | Portals, wall-align floors, LA sky, slope Z |
+| drawmasks | `render/DrawMasks.js` | Face sprites (no wall/floor/maskwall yet) |
+| Look around | `platform/input/Keyboard.js` | WASD + turn |
 
 ### 12.3 Missing / next
 
-Real `drawrooms` / `drawmasks` from `ENGINE.C`, GRP/ART, board load, Duke play loop, AudioLib, menus.
+Full `parascan` psky strips, wall/floor sprites + maskwalls, `clipmove`, true `grouscan` slopes, bunch sorting, Duke play loop.
 
 ---
 
@@ -291,10 +289,10 @@ Goal: **visible Build map render** before deep Duke gameplay.
 |----------|------|-----|------------------------|
 | P0 | Canvas + vline primitives | Done | `ViewBuffer`, `VlineDrawer` |
 | P1 | GRP + ART + palette | Done | `grp/` · `CACHE1D.C`, `ENGINE.C` loadpics/loadpalette |
-| P1 | `loadboard` | World for drawrooms | `engine/BoardLoader.js` · `ENGINE.C` |
-| P2 | `drawrooms` walls/floors | Real Build view | `render/` · `ENGINE.C` |
-| P2 | Sprites / masks | `drawmasks` | `ENGINE.C` |
-| P2 | `clipmove` + player | Walk maps | `ENGINE.C`, `PLAYER.C` |
+| P1 | `loadboard` | Done | `engine/BoardLoader.js` · `ENGINE.C` |
+| P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `FlatPlane.js` · `ENGINE.C` |
+| P2 | `clipmove` + player | Partial — wall clipmove | `ClipMove.js` · `ENGINE.C` |
+| P2 | Sprites / masks | Partial (face) | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
 | P3 | Duke weapons / actors | Game feel | `ACTORS.C`, `PLAYER.C` |
 
 ---
@@ -305,19 +303,23 @@ Goal: **visible Build map render** before deep Duke gameplay.
 |-----------------|------------|
 | Change tic rate / frame hooks | `app/GameLoop.js` |
 | Blit indexed pixels to the page | `platform/video/CanvasVideoOutput.js` |
+| Keyboard look / move | `platform/input/Keyboard.js`, `SoftwareRenderer.tick` |
 | Wire startup | `main.js` |
 | Screen size constants | `core/renderConstants.js` |
 | Timer / tic constants | `core/gameConstants.js` |
 | Frameplace / setview / clearview | `render/ViewBuffer.js` |
 | Draw a textured wall column | `render/VlineDrawer.js` |
-| Demo spinning room | `render/DemoRoomRenderer.js` |
+| Flat floor/ceiling UV | `render/FlatPlane.js` |
+| Portal drawrooms | `render/DrawRooms.js` |
+| Wall clipmove | `engine/ClipMove.js` |
+| Face sprites / drawmasks | `render/DrawMasks.js` |
 | Renderer facade | `render/SoftwareRenderer.js` |
 | Load DUKE3D.GRP | `grp/GrpFile.js`, `main.js` |
 | ART tiles / columns | `grp/ArtTiles.js` |
 | palette.dat | `grp/BuildPalette.js` |
+| Spawn / inside / updatesector | `engine/SectorQuery.js` |
+| Load a `.map` | `engine/BoardLoader.js` · `E1L1.MAP` in GRP |
 | Demo spinning room (temp) | `render/DemoRoomRenderer.js` |
-| (Next) Real Build 3D frame | `drawrooms` from `ENGINE.C` |
-| (Next) Load a `.map` | `engine/BoardLoader.js` · `E1L1.MAP` in GRP |
 
 ---
 
@@ -347,6 +349,7 @@ When unsure how something should work: open the C file in `BuildEngine/src/` or 
 cd "DukeNukem3DJs"
 python -m http.server 8080
 # → http://localhost:8080
+# Controls: WASD move · ←→ or Q/E turn (click page first for focus)
 ```
 
 User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is implemented. Do not commit commercial game data.
@@ -371,6 +374,23 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | Software renderer: `ViewBuffer`, `VlineDrawer`, `HlineDrawer`, `Palookup`, demo box room |
 | 2026-07-20 | Clarified source of truth: Duke/Build C for behaviour; DoomJS process-only |
 | 2026-07-20 | GRP/ART/palette load; demo room uses real tiles + palookup |
+| 2026-07-20 | `loadboard(E1L1.MAP)` + portal `DrawRooms` (walls/portals/umost-dmost) |
+| 2026-07-20 | Wallscan V shift + 4:3 present; APLAYER spawn + debug overlay |
+| 2026-07-20 | Flat textured floors/ceilings (`FlatPlane`); WASD/turn look; `updatesector` |
+| 2026-07-20 | Floor/ceil UV: world-space intersection (fixes rotate pinch) |
+| 2026-07-20 | Raised-crate floor bounds (exterior farthest-wall); face `drawmasks` subset |
+| 2026-07-20 | Wall-aligned floors (`stat&64`); `getzsofslope`; parallax LA sky (`parascan` subset) |
+| 2026-07-20 | Build portal para/void rules (no sky-tall abyss walls); wall-sprite fences; less shade bias |
+| 2026-07-20 | Sky fill no longer blacks outdoors; deferred sprites; slope step V + screen-space portal tests |
+| 2026-07-20 | Slope floors: closed-form ray∩plane; gable V uses base floorz (no apex warp); near-plane wall clip |
+| 2026-07-20 | Fix slope black “shadow” clip: no floor umost/dmost seal; sky fills full column; skip slope misses |
+| 2026-07-20 | Next phase: `clipmove` wall collision + BFS portal flood (more of E1L1 visible) |
+| 2026-07-20 | Revert BFS portal flood (infinite re-queue froze on move); keep clipmove + DFS stack |
+| 2026-07-20 | Build portal dmost=min(dplc,uwall) for raised floors — stops slope painting black over courtyard |
+| 2026-07-20 | Defer portal recurse until all wall strips done (Build drawalls order); hide system sprites (SECTOREFFECTOR/MUSICANDSFX/…) |
+| 2026-07-20 | Portal column masks (no bbox gap paint); gotsector sibling pre-claim; drop near-plane vertex pull (Build rejects yb<256) |
+| 2026-07-20 | **Next phase:** replace DFS portals with Build bunch `scansector`/`drawalls` front-to-back (`DrawRooms.js` rewrite) |
+| 2026-07-20 | Fidelity audit: EYEHEIGHT 40<<8 spawn, walldist 164, setaspect/viewingrange, neighbor updatesector; not CRT scale |
 
 ---
 

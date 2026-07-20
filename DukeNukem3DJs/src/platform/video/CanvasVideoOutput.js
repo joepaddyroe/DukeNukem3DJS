@@ -5,7 +5,8 @@ export const DEFAULT_PIXEL_SCALE = 2;
 
 /**
  * Presents the indexed software framebuffer at native 320×200 resolution,
- * scaled to fill viewport height (4:3 preserved; pillarbox if needed).
+ * scaled into a 4:3 viewport (DOS CRT pixel aspect). Square-pixel 8:5 would
+ * make walls/textures look horizontally stretched.
  */
 export class CanvasVideoOutput {
   /**
@@ -56,25 +57,40 @@ export class CanvasVideoOutput {
   }
 
   /**
-   * Uniform scale chosen to fill the viewport height (4:3 preserved).
-   * @returns {number}
+   * Largest 4:3 rect that fits the window (letterbox / pillarbox as needed).
+   * @returns {number} Scale of one game pixel in CSS pixels (height-based).
    */
   computePixelScale() {
-    return Math.max(1, this.windowHeight / this.gameHeight);
+    const fit = this.fit43(this.windowWidth, this.windowHeight);
+    return Math.max(1, fit.h / this.gameHeight);
+  }
+
+  /**
+   * @param {number} maxW
+   * @param {number} maxH
+   * @returns {{ x: number, y: number, w: number, h: number }}
+   */
+  fit43(maxW, maxH) {
+    const targetAspect = 4 / 3;
+    let w = maxW;
+    let h = (w / targetAspect) | 0;
+    if (h > maxH) {
+      h = maxH;
+      w = (h * targetAspect) | 0;
+    }
+    return {
+      x: ((maxW - w) / 2) | 0,
+      y: ((maxH - h) / 2) | 0,
+      w,
+      h,
+    };
   }
 
   /**
    * @returns {{ x: number, y: number, w: number, h: number }}
    */
   getDestRect() {
-    const w = this.gameWidth * this.pixelScale;
-    const h = this.windowHeight;
-    return {
-      x: ((this.windowWidth - w) / 2) | 0,
-      y: 0,
-      w,
-      h,
-    };
+    return this.fit43(this.windowWidth, this.windowHeight);
   }
 
   /**

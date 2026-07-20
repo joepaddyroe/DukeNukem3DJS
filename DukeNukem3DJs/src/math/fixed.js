@@ -20,13 +20,90 @@ export function mulscale(a, b, scale) {
 }
 
 /** @param {number} a @param {number} b */
+export function mulscale2(a, b) {
+  return mulscale(a, b, 2);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale5(a, b) {
+  return mulscale(a, b, 5);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale11(a, b) {
+  return mulscale(a, b, 11);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale10(a, b) {
+  return mulscale(a, b, 10);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale14(a, b) {
+  return mulscale(a, b, 14);
+}
+
+/** @param {number} a @param {number} b */
 export function mulscale16(a, b) {
   return mulscale(a, b, 16);
 }
 
 /** @param {number} a @param {number} b */
+export function mulscale19(a, b) {
+  return mulscale(a, b, 19);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale20(a, b) {
+  return mulscale(a, b, 20);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale21(a, b) {
+  return mulscale(a, b, 21);
+}
+
+/** @param {number} a @param {number} b */
 export function mulscale30(a, b) {
   return mulscale(a, b, 30);
+}
+
+/**
+ * ((a*b)+(c*d)) >> scale
+ * @param {number} a
+ * @param {number} b
+ * @param {number} c
+ * @param {number} d
+ * @param {number} scale
+ */
+export function dmulscale(a, b, c, d, scale) {
+  return (
+    Number(
+      (BigInt(a | 0) * BigInt(b | 0) + BigInt(c | 0) * BigInt(d | 0)) >>
+        BigInt(scale),
+    ) | 0
+  );
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale6(a, b, c, d) {
+  return dmulscale(a, b, c, d, 6);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale10(a, b, c, d) {
+  return dmulscale(a, b, c, d, 10);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale14(a, b, c, d) {
+  return dmulscale(a, b, c, d, 14);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale32(a, b, c, d) {
+  return dmulscale(a, b, c, d, 32);
 }
 
 /**
@@ -44,8 +121,45 @@ export function divscale(a, b, scale) {
 }
 
 /** @param {number} a @param {number} b */
+export function divscale12(a, b) {
+  return divscale(a, b, 12);
+}
+
+/** @param {number} a @param {number} b */
+export function divscale14(a, b) {
+  return divscale(a, b, 14);
+}
+
+/** @param {number} a @param {number} b */
 export function divscale16(a, b) {
   return divscale(a, b, 16);
+}
+
+/** @param {number} a @param {number} b */
+export function divscale26(a, b) {
+  return divscale(a, b, 26);
+}
+
+/** @param {number} a @param {number} b */
+export function divscale28(a, b) {
+  return divscale(a, b, 28);
+}
+
+/** @param {number} a @param {number} b */
+export function divscale30(a, b) {
+  return divscale(a, b, 30);
+}
+
+/** @param {number} a @param {number} b */
+export function divscale32(a, b) {
+  return divscale(a, b, 32);
+}
+
+/** Approximate nsqrtasm — integer sqrt. */
+export function nsqrtasm(n) {
+  const v = n >>> 0;
+  if (v === 0) return 0;
+  return Math.floor(Math.sqrt(v)) | 0;
 }
 
 /**
