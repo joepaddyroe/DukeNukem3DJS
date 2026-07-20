@@ -10,7 +10,7 @@ import { loadboardFromFs } from './engine/BoardLoader.js';
 import { Keyboard } from './platform/input/Keyboard.js';
 import { buildTables } from './math/BuildTables.js';
 
-const BUILD_TAG = '2026-07-21-gunsway';
+const BUILD_TAG = '2026-07-21-swingdoor';
 const GRP_PATHS = ['./assets/DUKE3D.GRP', './DUKE3D.GRP'];
 const MAP_NAME = 'E1L1.MAP';
 

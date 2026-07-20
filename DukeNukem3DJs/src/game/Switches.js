@@ -3,6 +3,8 @@
  */
 import { operateSectors } from './Operate.js';
 import { sectorHasAnimation } from './Animate.js';
+import { ensureHitType } from './HitType.js';
+import { SECTOREFFECTOR } from './Names.js';
 
 export const ACTIVATOR = 2;
 export const ACTIVATORLOCKED = 4;
@@ -73,6 +75,15 @@ export function checkActivatorMotion(board, lotag) {
     }
     if ((s.lotag | 0) !== (lotag | 0)) continue;
     if (sectorHasAnimation(s.sectnum | 0)) return 1;
+
+    // SECTOR.C: SE lotag 11 mid-swing blocks switch
+    for (let j = 0; j < board.numsprites; j++) {
+      const e = board.sprites[j];
+      if ((e.picnum & 0xffff) !== SECTOREFFECTOR) continue;
+      if ((e.lotag & 0xff) !== 11) continue;
+      if ((e.sectnum | 0) !== (s.sectnum | 0)) continue;
+      if (ensureHitType(j).temp_data[4] | 0) return 1;
+    }
   }
   return 0;
 }

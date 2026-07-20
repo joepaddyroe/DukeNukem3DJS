@@ -53,7 +53,7 @@ If you are picking up this project with no chat history:
 5. Respect **§2–3** (SOLID + layers) before editing.
 6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (USE / lotag 9 + 20–22) + **switches**. 4:3 presentation.
+**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (USE / lotag 9 + 20–23 swing + switches). 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -67,7 +67,7 @@ If you are picking up this project with no chat history:
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor (ceilsprite) + maskwalls |
 | **P2** | Player movement + `clipmove` | Partial — walls + sprite clips + getzrange/pushmove |
-| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/switches; no actors/CON |
+| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/swing/switches; no actors/CON |
 
 ---
 
@@ -293,7 +293,7 @@ Board load          ████████░░   ~85%   E1L1 + updatesector/
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
 Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
 drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceilsprite + maskwalls
-Duke play loop      █████░░░░░   ~55%   pistol + doors 9/20–22 + switches; no actors/CON
+Duke play loop      █████░░░░░   ~60%   pistol + doors 9/20–23 + switches; no actors/CON
 ```
 
 ### 12.2 Done well
@@ -308,13 +308,13 @@ Duke play loop      █████░░░░░   ~55%   pistol + doors 9/20�
 | hitscan | `engine/Hitscan.js` | Walls/floors/sprites CLIPMASK1 |
 | Play tic | `game/Player.js`, `GetInput.js`, `ProcessInput.js` | Gravity, Space jump, Z/C crouch, friction + clipmove |
 | Pistol | `game/Weapons.js`, `render/WeaponHud.js` | Kickback, shoot spark, bulletholes, FIRSTGUN HUD |
-| Doors | `game/Operate.js`, `Animate.js`, `engine/NearTag.js` | USE (E), lotag 9 slide + 20/21/22 ceiling/floor/split |
+| Doors | `game/Operate.js`, `Animate.js`, `SwingDoors.js`, `engine/NearTag.js` | USE (E), lotag 9/20–22 + swing 23 (SE 11) |
 | Switches | `game/Switches.js` | `checkhitswitch` + `operateactivators` subset |
 | Look around | `platform/input/Keyboard.js` | WASD + turn + mouse fire |
 
 ### 12.3 Missing / next
 
-Actors / CON; more door types; other weapons; water/jetpack; sounds.
+Actors / CON; subway doors (25) / bridges (27); other weapons; water/jetpack; sounds.
 
 ---
 
@@ -330,7 +330,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `Grouscan.js`, `FlatScan.js` · `ENGINE.C` |
 | P2 | `clipmove` + player | Partial — walls + sprites + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
 | P2 | Sprites / masks | Partial — face/wall/floor ceilsprite | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
-| P3 | Duke play loop | Partial — processinput + pistol + doors/switches | `game/ProcessInput.js`, `Weapons.js`, `Operate.js`, `Switches.js` |
+| P3 | Duke play loop | Partial — processinput + pistol + doors/swing/switches | `game/ProcessInput.js`, `Weapons.js`, `Operate.js`, `SwingDoors.js` |
 | P3 | Duke weapons / actors | Partial — pistol only; no CON actors | `ACTORS.C`, `PLAYER.C` |
 
 ---
@@ -344,7 +344,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | Keyboard look / move | `platform/input/Keyboard.js`, `game/GetInput.js` |
 | Duke play tic (jump/crouch/gravity) | `game/ProcessInput.js`, `game/Player.js`, `app/Game.js` |
 | Pistol / hitscan | `game/Weapons.js`, `engine/Hitscan.js`, `render/WeaponHud.js` |
-| Doors / USE / switches | `game/Operate.js`, `Animate.js`, `Switches.js`, `engine/NearTag.js` |
+| Doors / USE / switches | `game/Operate.js`, `Animate.js`, `SwingDoors.js`, `Switches.js`, `engine/NearTag.js`, `WallGeom.js` |
 | Wire startup | `main.js` |
 | Screen size constants | `core/renderConstants.js` |
 | Timer / tic constants | `core/gameConstants.js` |
@@ -450,6 +450,8 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-21 | Gun HUD: `gun_pos` + `weapon_sway` rest bob (PLAYER.C displayweapon) |
 | 2026-07-21 | Doors: `neartag` + `operatesectors` lotag 20/21/22 + `doanimations`; USE = E |
 | 2026-07-21 | Sliding doors (lotag 9) + switches: wall x/y anim, `checkhitswitch` / `operateactivators` |
+| 2026-07-21 | Gun sway: `bobcounter` → `weapon_sway` + horizontal `weapon_xoffset` |
+| 2026-07-21 | Swing doors (lotag 23 / SE 11): `rotatepoint`/`dragpoint`, `msx`/`msy`, `moveSwingDoors` |
 
 ---
 

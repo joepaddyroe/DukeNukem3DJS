@@ -8,6 +8,7 @@ import { processInput } from '../game/ProcessInput.js';
 import { processWeapon, pistolHudTiles, PISTOL_WEAPON } from '../game/Weapons.js';
 import { processUse } from '../game/Operate.js';
 import { doAnimations, clearAnimations } from '../game/Animate.js';
+import { initSwingDoors, moveSwingDoors } from '../game/SwingDoors.js';
 
 export class Game {
   /**
@@ -31,6 +32,7 @@ export class Game {
     const rooms = this.renderer.drawRooms;
     if (!rooms) return;
     clearAnimations();
+    if (rooms.board) initSwingDoors(rooms.board);
     this.player.resetFromCamera(rooms);
     this._playerReady = true;
   }
@@ -67,6 +69,7 @@ export class Game {
     processWeapon(this.player, rooms.board, rooms.art, sync);
     processUse(this.player, rooms.board, rooms.art, sync);
     doAnimations(rooms.board, this.player);
+    moveSwingDoors(rooms.board);
     this.player.applyToCamera(rooms);
     rooms.setPlayDebug({
       on_ground: this.player.on_ground,

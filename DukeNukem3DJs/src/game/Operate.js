@@ -5,6 +5,7 @@ import { neartag } from '../engine/NearTag.js';
 import { nextsectorneighborz } from '../engine/NextSector.js';
 import { setAnimation, setWallAnimation, getAnimationGoal } from './Animate.js';
 import { checkHitSwitch, ACTIVATOR, MASTERSWITCH } from './Switches.js';
+import { operateSwingDoor, swingDoorBusy } from './SwingDoors.js';
 import { BIT_OPEN } from './GetInput.js';
 
 /**
@@ -167,6 +168,9 @@ export function operateSectors(board, sn) {
     case 9:
       operateSlideDoor(board, sn);
       return;
+    case 23:
+      operateSwingDoor(board, sn);
+      return;
     case 20: {
       let j;
       if (sptr.lotag & 0x8000) {
@@ -305,6 +309,7 @@ export function processUse(p, board, art, sync) {
     if (!sec) return;
     if (isanearoperator(sec.lotag)) {
       if (sectorHasActivator(board, neartagsector)) return;
+      if ((sec.lotag & 0xff) === 23 && swingDoorBusy(board, neartagsector)) return;
       operateSectors(board, neartagsector);
       p.lastUse = `sect=${neartagsector} lotag=${sec.lotag}`;
       return;
