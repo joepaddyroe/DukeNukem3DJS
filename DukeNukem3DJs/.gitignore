@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# User-supplied game data (do not commit commercial assets)
+*.GRP
+*.grp
+*.ART
+*.art
+*.MAP
+*.map
+assets/*.GRP
+assets/*.grp
+DUKE3D.GRP
+DUKE.RTS
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
