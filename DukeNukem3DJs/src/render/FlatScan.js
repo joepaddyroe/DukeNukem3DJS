@@ -124,9 +124,11 @@ export function setupFlatScan(opts) {
   if (orient & 2) return null; // slope → grouscan / FlatPlane
 
   const planeZ = isCeil ? sec.ceilingz : sec.floorz;
-  // ENGINE.C: ceil globalzd = ceilingz-posz; flor = posz-floorz; skip if > 0
-  const globalzd = isCeil ? planeZ - posz : posz - planeZ;
-  if (globalzd > 0) return null;
+  // ENGINE.C skips when globalzd > 0 (camera on the back side). Roof undersides
+  // and overhangs still need texturing — use −|Δz| so UV math stays valid.
+  let globalzd = isCeil ? planeZ - posz : posz - planeZ;
+  if (globalzd > 0) globalzd = -globalzd;
+  if (globalzd === 0) globalzd = -1;
 
   const tilenum = (isCeil ? sec.ceilingpicnum : sec.floorpicnum) & 0xffff;
   art.loadtile(tilenum);

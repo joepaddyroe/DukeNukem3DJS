@@ -1424,7 +1424,7 @@ export class DrawRooms {
     if (y2 < y1 || ysiz <= 0) return;
     const texcol = this.art.getColumn(tilenum, texX);
     if (!texcol) {
-      this.fillCol(x, y1, y2, 96);
+      // Missing ART column — skip (was solid palette 96)
       return;
     }
     const vinc = Math.imul(swall | 0, globalyscale | 0) | 0;
@@ -1447,10 +1447,9 @@ export class DrawRooms {
 
   drawPlaneCol(x, y1, y2, scan, plane, fallbackColor) {
     if (y2 < y1) return;
-    if (!scan && !plane) {
-      this.fillCol(x, y1, y2, fallbackColor);
-      return;
-    }
+    // No setup → leave pixels as-is (do not paint solid debug palette colours)
+    if (!scan && !plane) return;
+
     const shadeSrc = scan ? scan.shade : plane.shade;
     const shade = Math.min(
       this.renderer.palookup.numShades - 1,
@@ -1465,11 +1464,13 @@ export class DrawRooms {
       posx: this.posx,
       posy: this.posy,
       posz: this.posz,
-      cos: this.cosVR,
-      sin: this.sinVR,
+      // World unproject uses ang trig (not viewingrange-scaled)
+      cos: this.cos,
+      sin: this.sin,
       halfxdimen,
       xdimenscale: this.xdimenscale,
       globalhoriz: this.globalhoriz,
+      viewingrangerecip: this.renderer.buffer.viewingrangerecip ?? 65536,
     };
     for (let y = y1; y <= y2; y++) {
       let tex = -1;
@@ -1478,11 +1479,8 @@ export class DrawRooms {
       } else if (plane) {
         tex = sampleFlatPlane(plane, x, y, cam);
       }
-      if (tex < 0) {
-        pixels[ylookup[y + windowy1] + screenX] =
-          tables[shadeOff + (fallbackColor & 255)];
-        continue;
-      }
+      // Missed sample: skip (was opaque fallbackColor ≈ palette 18/40 — beige/rust)
+      if (tex < 0) continue;
       pixels[ylookup[y + windowy1] + screenX] = tables[shadeOff + tex];
     }
   }
@@ -1494,7 +1492,7 @@ export class DrawRooms {
     const xsiz = this.art.tilesizx[tilenum] | 0;
     const ysiz = this.art.tilesizy[tilenum] | 0;
     if (xsiz <= 0 || ysiz <= 0) {
-      this.fillCol(x, y1, y2, isCeil ? 18 : 40);
+      // No sky tile — leave uncleared (was solid 18/40 debug fill)
       return;
     }
     const { buffer } = this.renderer;

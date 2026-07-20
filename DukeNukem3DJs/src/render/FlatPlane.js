@@ -70,10 +70,7 @@ export function setupFlatPlane(opts) {
 
   const isSlope = (stat & 2) !== 0;
   const baseZ = isCeil ? sec.ceilingz : sec.floorz;
-  const zd = isCeil ? baseZ - posz : posz - baseZ;
-  // Above a floor / below a ceiling at sector reference → still allow mild slopes
-  if (!isSlope && zd >= 0) return null;
-
+  // Allow both sides of the plane (roof undersides). FlatScan uses −|Δz|.
   const zRel = baseZ - posz;
 
   const tilenum = (isCeil ? sec.ceilingpicnum : sec.floorpicnum) & 0xffff;
@@ -193,18 +190,16 @@ export function sampleFlatPlane(plane, x, y, cam) {
 
   if (plane.isSlope) {
     let hit = intersectSlope(plane, x, dy, cam);
-    if (!hit) {
-      // Fallback: iterative flat-Z refine (helps near-horizon / grazing rays)
-      hit = refineSlopeHit(plane, x, dy, cam);
-    }
+    if (!hit) hit = refineSlopeHit(plane, x, dy, cam);
     if (!hit) return -1;
-    const z = planeZAt(plane, hit.wx, hit.wy);
-    if (!plane.isCeil && z <= (cam.posz | 0)) return -1;
-    if (plane.isCeil && z >= (cam.posz | 0)) return -1;
     return sampleWorldUV(plane, hit.wx, hit.wy);
   }
 
-  let depth = ((plane.zRel << 7) * cam.xdimenscale) / (dy * 4096);
+  // Flat: depth from |zRel| so both sides of the plane texture
+  const zAbs = plane.zRel < 0 ? -plane.zRel : plane.zRel;
+  const dyAbs = dy < 0 ? -dy : dy;
+  if (dyAbs === 0) return -1;
+  let depth = ((zAbs << 7) * cam.xdimenscale) / (dyAbs * 4096);
   if (!(depth > 0)) depth = 1 << 20;
   const hit = unproject(cam, x, depth);
   return sampleWorldUV(plane, hit.wx, hit.wy);
@@ -286,6 +281,7 @@ function refineSlopeHit(plane, x, dy, cam) {
  */
 function unproject(cam, x, depth) {
   const half = cam.halfxdimen || 1;
+  // Match Build: xp = (x-half)*depth/half, then rotate by cos/sin (dmulscale6-ish)
   const xp = ((x - half) * depth) / half;
   const yp = depth;
   const c = cam.cos;
