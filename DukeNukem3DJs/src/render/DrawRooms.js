@@ -18,10 +18,11 @@ import {
 } from '../math/fixed.js';
 import { setupFlatPlane, sampleFlatPlane } from './FlatPlane.js';
 import { HorizLookup, setupFlatScan, sampleFlatScan } from './FlatScan.js';
-import { BUILD_ANGLE_MASK, BUILD_ANGLES } from '../core/renderConstants.js';
+import { BUILD_ANGLE_MASK } from '../core/renderConstants.js';
 import { pickSpawn, inside, EYEHEIGHT, getzsofslope } from '../engine/SectorQuery.js';
 import { clipmove, CLIPMASK0 } from '../engine/ClipMove.js';
 import { buildTables } from '../math/BuildTables.js';
+import { parallaxSky } from './ParallaxSky.js';
 
 /** Build rejects walls with yp < 256 after dmulscale6 (ENGINE.C scansector). */
 const NEAR_Y = 256;
@@ -102,9 +103,11 @@ export class DrawRooms {
     this._ceilScan = null;
     /** @type {import('./FlatScan.js').FlatScan|null} */
     this._florScan = null;
-    this._horizLookup = new HorizLookup();
     this._skyCeil = false;
     this._skyFlor = false;
+    /** Last pic used for parallaxSky.setupBackdrop */
+    this._skyBackdropPic = -1;
+    this._horizLookup = new HorizLookup();
 
     /** @type {import('./DrawMasks.js').DrawMasks|null} */
     this.drawMasks = null;
@@ -250,6 +253,14 @@ export class DrawRooms {
     this.globaluclip = (0 - this.globalhoriz) * this.xdimscale;
     this.globaldclip = (ydimen - this.globalhoriz) * this.xdimscale;
     this._horizLookup.rebuild(buffer.ydim, divscale32(1, this.yxaspect));
+
+    // ENGINE.C dosetaspect → radarang2 for parascan
+    const xdimenrecip = divscale32(1, Math.max(1, xdimen));
+    parallaxSky.rebuildRadarang2(
+      xdimen,
+      this.viewingrange,
+      xdimenrecip,
+    );
 
     const camZ = getzsofslope(
       board,
@@ -1542,24 +1553,50 @@ export class DrawRooms {
 
   drawSkyCol(x, y1, y2, sec, isCeil) {
     if (y2 < y1) return;
-    const tilenum = (isCeil ? sec.ceilingpicnum : sec.floorpicnum) & 0xffff;
-    this.art.loadtile(tilenum);
-    const xsiz = this.art.tilesizx[tilenum] | 0;
-    const ysiz = this.art.tilesizy[tilenum] | 0;
-    if (xsiz <= 0 || ysiz <= 0) {
-      // No sky tile — leave uncleared (was solid 18/40 debug fill)
-      return;
+    const basePic = (isCeil ? sec.ceilingpicnum : sec.floorpicnum) & 0xffff;
+    // PREMAP.C setupbackdrop — once per distinct sky pic
+    if (this._skyBackdropPic !== basePic) {
+      parallaxSky.setupBackdrop(basePic);
+      this._skyBackdropPic = basePic;
     }
+    this.art.loadtile(basePic);
+    const xsiz = this.art.tilesizx[basePic] | 0;
+    const ysiz = this.art.tilesizy[basePic] | 0;
+    if (xsiz <= 0 || ysiz <= 0) return;
+
     const { buffer } = this.renderer;
-    const half = buffer.halfxdimen || 1;
-    const angOff = ((x - half) * 512) / Math.max(1, half);
-    const skyAng = (this.ang + angOff) & BUILD_ANGLE_MASK;
-    const texX = positiveMod(((skyAng * xsiz) / BUILD_ANGLES) | 0, xsiz);
+    const ydimen = buffer.ydimen;
+    const skyHoriz = parallaxSky.skyHoriz(this.globalhoriz, ydimen);
+    const xpan = (isCeil ? sec.ceilingxpanning : sec.floorxpanning) | 0;
+    const ypan = (isCeil ? sec.ceilingypanning : sec.floorypanning) | 0;
+
+    const colSetup = parallaxSky.columnSetup({
+      x,
+      ang: this.ang,
+      basePic,
+      xpan,
+      ypan,
+      xsiz,
+      ysiz,
+      xdimscale: this.xdimscale,
+      viewingrange: this.viewingrange,
+      skyHoriz,
+    });
+    if (!colSetup) return;
+
+    const tilenum = colSetup.tilenum;
+    if (tilenum !== basePic) this.art.loadtile(tilenum);
+    const tileXs = this.art.tilesizx[tilenum] | 0;
+    const tileYs = this.art.tilesizy[tilenum] | 0;
+    if (tileXs <= 0 || tileYs <= 0) return;
+
+    let texX = colSetup.texX;
+    if (texX >= tileXs) texX %= tileXs;
+    if (texX < 0) texX = ((texX % tileXs) + tileXs) % tileXs;
+
     const col = this.art.getColumn(tilenum, texX);
-    if (!col) {
-      this.fillCol(x, y1, y2, isCeil ? 18 : 40);
-      return;
-    }
+    if (!col) return;
+
     const shade = Math.min(
       this.renderer.palookup.numShades - 1,
       Math.max(0, (isCeil ? sec.ceilingshade : sec.floorshade) | 0),
@@ -1568,12 +1605,16 @@ export class DrawRooms {
     const tables = this.renderer.palookup.tables;
     const { pixels, ylookup, windowx1, windowy1 } = buffer;
     const screenX = windowx1 + x;
-    const ypan = (isCeil ? sec.ceilingypanning : sec.floorypanning) | 0;
-    const mid = ysiz >> 1;
+    const { vinc, vplc0, shift } = colSetup;
+    const yMask = tileYs; // wrap with %
+
+    let vplc = (vplc0 + Math.imul(vinc, y1)) | 0;
     for (let y = y1; y <= y2; y++) {
-      let ty = mid + (y - this.globalhoriz) + ypan;
-      ty = positiveMod(ty, ysiz);
+      let ty = (vplc >> shift) | 0;
+      ty %= yMask;
+      if (ty < 0) ty += yMask;
       pixels[ylookup[y + windowy1] + screenX] = tables[shadeOff + (col[ty] & 255)];
+      vplc = (vplc + vinc) | 0;
     }
   }
 

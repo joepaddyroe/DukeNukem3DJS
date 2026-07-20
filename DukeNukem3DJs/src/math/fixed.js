@@ -20,6 +20,11 @@ export function mulscale(a, b, scale) {
 }
 
 /** @param {number} a @param {number} b */
+export function mulscale1(a, b) {
+  return mulscale(a, b, 1);
+}
+
+/** @param {number} a @param {number} b */
 export function mulscale2(a, b) {
   return mulscale(a, b, 2);
 }
@@ -97,6 +102,11 @@ export function mulscale30(a, b) {
 /** @param {number} a @param {number} b */
 export function mulscale31(a, b) {
   return mulscale(a, b, 31);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale32(a, b) {
+  return mulscale(a, b, 32);
 }
 
 /**

@@ -55,7 +55,7 @@ If you are picking up this project with no chat history:
 | **P1** | `loadboard` (E1L1) | Done |
 | **P2** | `drawrooms` walls + portals | Partial — bunch/`scansector`/`drawalls` port; wallmost approx |
 | **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align; slope approx) |
-| **P2** | Parallax sky (`parascan`) | Partial (single-tile cylindrical) |
+| **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial (face + wall sprites) |
 | **P2** | Player movement + `clipmove` | Partial (`clipmove` walls; no pushmove/sprites) |
 
@@ -410,6 +410,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | **Always check with vanilla** rule added to PROJECT.md; revert broken wallmost view-ray half-port |
 | 2026-07-20 | Wall sprites: perspective `lwall` U (ENGINE.C 3339) — fixes FOV-edge horizontal squash |
 | 2026-07-20 | Fix `krecipasm` to ENGINE.C reciptable/float path (was 2^32/n → wrong wall-sprite U scale) |
+| 2026-07-20 | Parallax sky: parascan subset (`radarang2`, psky LA, parallaxyscale, wallscan V) |
 
 ---
 
