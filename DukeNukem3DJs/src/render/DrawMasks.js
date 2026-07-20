@@ -1,13 +1,20 @@
 import {
   dmulscale6,
+  dmulscale8,
+  dmulscale10,
+  dmulscale12,
   dmulscale32,
   divscale,
+  divscale18,
+  divscale30,
   krecipasm,
+  klabs,
   mulscale2,
   mulscale8,
   mulscale9,
   mulscale10,
   mulscale11,
+  mulscale12,
   mulscale14,
   mulscale15,
   mulscale16,
@@ -33,8 +40,8 @@ const MAX_SMOST_WALLS = 512;
 const HIDDEN_PICNUMS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13]);
 
 /**
- * drawmasks subset — face + wall sprites.
- * ENGINE.C: tsprites collected in scansector; clipped via smost in drawsprite.
+ * drawmasks subset — face/wall/floor sprites + maskwalls.
+ * ENGINE.C: tsprites in scansector; maskwall[] in drawalls; interleaved in drawmasks.
  */
 export class DrawMasks {
   /**
@@ -46,8 +53,10 @@ export class DrawMasks {
     this.art = art;
     /** @type {Set<number>} */
     this._drawn = new Set();
-    /** @type {{ spr: import('../engine/Board.js').Sprite, index: number, kind: 'face'|'wall' }[]} */
+    /** @type {{ spr: import('../engine/Board.js').Sprite, index: number, kind: 'face'|'wall'|'floor' }[]} */
     this._queue = [];
+    /** @type {number[]} scan indices for maskwalls (ENGINE.C maskwall[]) */
+    this._maskwalls = [];
 
     // ENGINE.C smost* — scan index + type + optional umost/dmost snapshots
     this.smostwall = new Int32Array(MAX_SMOST_WALLS);
@@ -61,8 +70,17 @@ export class DrawMasks {
   beginFrame() {
     this._drawn.clear();
     this._queue.length = 0;
+    this._maskwalls.length = 0;
     this.smostwallcnt = 0;
     this.smostcnt = 0;
+  }
+
+  /**
+   * ENGINE.C: maskwall[maskwallcnt++] = z when (cstat&48)==16
+   * @param {number} scan
+   */
+  queueMaskWall(scan) {
+    this._maskwalls.push(scan);
   }
 
   /** @returns {{ wall: number, cnt: number }} */
@@ -143,7 +161,7 @@ export class DrawMasks {
       if (pic === APLAYER || HIDDEN_PICNUMS.has(pic)) continue;
 
       const kindBits = spr.cstat & 48;
-      if (kindBits !== 0 && kindBits !== 16) continue;
+      if (kindBits !== 0 && kindBits !== 16 && kindBits !== 32) continue;
 
       const dx = spr.x - rooms.posx;
       const dy = spr.y - rooms.posy;
@@ -153,10 +171,13 @@ export class DrawMasks {
       }
 
       this._drawn.add(i);
+      let kind = 'face';
+      if (kindBits === 16) kind = 'wall';
+      else if (kindBits === 32) kind = 'floor';
       this._queue.push({
         spr,
         index: i,
-        kind: kindBits === 16 ? 'wall' : 'face',
+        kind,
       });
     }
   }
@@ -165,7 +186,7 @@ export class DrawMasks {
    * @param {import('./DrawRooms.js').DrawRooms} rooms
    */
   flush(rooms) {
-    /** @type {{ spr: import('../engine/Board.js').Sprite, index: number, kind: 'face'|'wall', xp: number, yp: number, xb: number }[]} */
+    /** @type {{ spr: import('../engine/Board.js').Sprite, index: number, kind: 'face'|'wall'|'floor', xp: number, yp: number, xb: number }[]} */
     const list = [];
 
     for (const item of this._queue) {
@@ -177,6 +198,9 @@ export class DrawMasks {
 
       if (item.kind === 'face') {
         if (yp <= MIN_SPRITE_YP) continue;
+      } else if (item.kind === 'floor') {
+        // Floor sprites use flat Z; keep if roughly in front
+        if (yp <= 0 && xp * xp + yp * yp < (256 * 256)) continue;
       } else if (yp <= 0) {
         continue;
       }
@@ -190,23 +214,371 @@ export class DrawMasks {
         index: item.index,
         kind: item.kind,
         xp,
-        yp,
+        yp: item.kind === 'floor' ? Math.max(yp, 1) : yp,
         xb,
       });
     }
 
-    // ENGINE.C: sort by increasing yp, draw from farthest (end of list)
+    // ENGINE.C: sort by increasing yp, draw far→near interleaved with maskwalls
     list.sort((a, b) => a.yp - b.yp);
 
-    for (let i = list.length - 1; i >= 0; i--) {
-      const item = list[i];
-      if (item.kind === 'wall') {
-        this.drawWallSprite(rooms, item.spr, item.yp);
+    let si = list.length - 1;
+    let mi = this._maskwalls.length - 1;
+    const board = rooms.board;
+
+    while (si >= 0 && mi >= 0 && board) {
+      const sprItem = list[si];
+      const mscan = this._maskwalls[mi];
+      const wal = board.walls[rooms.thewall[mscan]];
+      if (!this.spriteWallFront(sprItem.spr, wal, board)) {
+        this.drawSpriteItem(rooms, sprItem);
+        si--;
       } else {
-        this.drawFaceSprite(rooms, item.spr, item.xb, item.yp);
+        // Draw sprites behind this maskwall (in its x-range), then the wall
+        const xb1 = rooms.xb1[mscan];
+        const xb2 = rooms.xb2[mscan];
+        while (si >= 0) {
+          const s = list[si];
+          const sx = s.xb >> 8;
+          if (sx < xb1 || sx > xb2) break;
+          if (this.spriteWallFront(s.spr, wal, board)) break;
+          this.drawSpriteItem(rooms, s);
+          si--;
+        }
+        this.drawMaskWall(rooms, mscan);
+        mi--;
       }
     }
+    while (si >= 0) {
+      this.drawSpriteItem(rooms, list[si]);
+      si--;
+    }
+    while (mi >= 0) {
+      this.drawMaskWall(rooms, this._maskwalls[mi]);
+      mi--;
+    }
     this._queue.length = 0;
+    this._maskwalls.length = 0;
+  }
+
+  /**
+   * @param {import('./DrawRooms.js').DrawRooms} rooms
+   * @param {{ spr: import('../engine/Board.js').Sprite, kind: string, xp: number, yp: number, xb: number }} item
+   */
+  drawSpriteItem(rooms, item) {
+    if (item.kind === 'wall') {
+      this.drawWallSprite(rooms, item.spr, item.yp);
+    } else if (item.kind === 'floor') {
+      this.drawFloorSprite(rooms, item.spr);
+    } else {
+      this.drawFaceSprite(rooms, item.spr, item.xb, item.yp);
+    }
+  }
+
+  /**
+   * ENGINE.C drawmaskwall — masked mid texture on portal (overpicnum).
+   * @param {import('./DrawRooms.js').DrawRooms} rooms
+   * @param {number} scan
+   */
+  drawMaskWall(rooms, scan) {
+    const board = rooms.board;
+    if (!board) return;
+    const sectnum = rooms.thesector[scan];
+    const sec = board.sectors[sectnum];
+    const wal = board.walls[rooms.thewall[scan]];
+    if (wal.nextsector < 0) return;
+    const nsec = board.sectors[wal.nextsector];
+
+    const z1 = Math.max(nsec.ceilingz, sec.ceilingz);
+    const z2 = Math.min(nsec.floorz, sec.floorz);
+
+    const xdimen = rooms.renderer.buffer.xdimen;
+    const uwall = new Int16Array(xdimen);
+    const dwall = new Int16Array(xdimen);
+    const uplc = new Int16Array(xdimen);
+    const dplc = new Int16Array(xdimen);
+
+    rooms.wallMost(uwall, scan, sectnum, false);
+    rooms.wallMost(uplc, scan, wal.nextsector, false);
+    const xb1 = rooms.xb1[scan];
+    const xb2 = rooms.xb2[scan];
+    for (let x = xb1; x <= xb2; x++) {
+      if (uplc[x] > uwall[x]) uwall[x] = uplc[x];
+    }
+    rooms.wallMost(dwall, scan, sectnum, true);
+    rooms.wallMost(dplc, scan, wal.nextsector, true);
+    for (let x = xb1; x <= xb2; x++) {
+      if (dplc[x] < dwall[x]) dwall[x] = dplc[x];
+    }
+
+    // Clip to open portal window
+    for (let x = xb1; x <= xb2; x++) {
+      if (uwall[x] < rooms.umost[x]) uwall[x] = rooms.umost[x];
+      if (dwall[x] > rooms.dmost[x]) dwall[x] = rooms.dmost[x];
+    }
+
+    const tilenum = wal.overpicnum & 0xffff;
+    this.art.loadtile(tilenum);
+    const xsiz = this.art.tilesizx[tilenum] | 0;
+    const ysiz = this.art.tilesizy[tilenum] | 0;
+    if (xsiz <= 0 || ysiz <= 0) return;
+
+    const walxrepeat = (wal.xrepeat || 8) << 3;
+    rooms.prepwallScan(scan, walxrepeat, wal.cstat);
+
+    let globalorientation = wal.cstat | 0;
+    let ybits = 0;
+    while (ybits < 15 && (1 << ybits) < ysiz) ybits++;
+    if ((1 << ybits) !== ysiz) ybits++;
+    const shiftVal = 32 - ybits;
+    let globalyscale = (wal.yrepeat || 8) << (shiftVal - 19);
+    let globalzd =
+      globalorientation & 4
+        ? ((rooms.posz - z2) * globalyscale) << 8
+        : ((rooms.posz - z1) * globalyscale) << 8;
+    globalzd += (wal.ypanning || 0) << 24;
+    if (globalorientation & 256) {
+      globalyscale = -globalyscale;
+      globalzd = -globalzd;
+    }
+
+    // smost occlusion (ENGINE.C drawmaskwall loop)
+    for (let i = this.smostwallcnt - 1; i >= 0; i--) {
+      const j = this.smostwall[i];
+      if (rooms.xb1[j] > xb2 || rooms.xb2[j] < xb1) continue;
+      if (rooms.wallfront(j, scan)) continue;
+      const lx = Math.max(rooms.xb1[j], xb1);
+      const rx = Math.min(rooms.xb2[j], xb2);
+      const typ = this.smostwalltype[i];
+      if (typ === 0) {
+        if (lx <= rx) {
+          if (lx === xb1 && rx === xb2) return;
+          for (let x = lx; x <= rx; x++) dwall[x] = 0;
+        }
+      } else if (typ === 1) {
+        const k = this.smoststart[i] - rooms.xb1[j];
+        for (let x = lx; x <= rx; x++) {
+          const v = this.smost[k + x];
+          if (v > uwall[x]) uwall[x] = v;
+        }
+      } else if (typ === 2) {
+        const k = this.smoststart[i] - rooms.xb1[j];
+        for (let x = lx; x <= rx; x++) {
+          const v = this.smost[k + x];
+          if (v < dwall[x]) dwall[x] = v;
+        }
+      }
+    }
+
+    const shade = Math.min(
+      this.renderer.palookup.numShades - 1,
+      Math.max(0, wal.shade | 0),
+    );
+    const xpan = wal.xpanning || 0;
+
+    for (let x = xb1; x <= xb2; x++) {
+      const y1 = uwall[x];
+      const y2 = dwall[x] - 1;
+      if (y2 < y1) continue;
+      let texU = (rooms.lwall[x] + xpan) | 0;
+      if (xsiz > 0) {
+        texU %= xsiz;
+        if (texU < 0) texU += xsiz;
+      }
+      rooms.drawWallCol(
+        x,
+        y1,
+        y2,
+        tilenum,
+        texU,
+        ysiz,
+        shade,
+        rooms.swall[x],
+        globalyscale,
+        globalzd,
+        shiftVal,
+        true,
+      );
+    }
+  }
+
+  /**
+   * ENGINE.C floor sprite (cstat&48)==32 — subset: in-front quads only.
+   * @param {import('./DrawRooms.js').DrawRooms} rooms
+   * @param {import('../engine/Board.js').Sprite} spr
+   */
+  drawFloorSprite(rooms, spr) {
+    const tilenum = spr.picnum & 0xffff;
+    this.art.loadtile(tilenum);
+    const xspan = this.art.tilesizx[tilenum] | 0;
+    const yspan = this.art.tilesizy[tilenum] | 0;
+    if (xspan <= 0 || yspan <= 0) return;
+
+    const cstat = spr.cstat | 0;
+    if (cstat & 64) {
+      if ((rooms.posz > spr.z) === ((cstat & 8) === 0)) return;
+    }
+
+    const picanm = this.art.picanm[tilenum] | 0;
+    let xoff = ((picanm << 16) >> 24) + (spr.xoffset | 0);
+    let yoff = ((picanm << 8) >> 24) + (spr.yoffset | 0);
+    if (cstat & 4) xoff = -xoff;
+    if (cstat & 8) yoff = -yoff;
+
+    // ENGINE.C: rotate center into view (dmulscale10)
+    const dax0 = (spr.x - rooms.posx) | 0;
+    const day0 = (spr.y - rooms.posy) | 0;
+    let rzi = [
+      dmulscale10(rooms.cos, dax0, rooms.sin, day0),
+      0,
+      0,
+      0,
+    ];
+    let rxi = [
+      dmulscale10(rooms.cos, day0, -rooms.sin, dax0),
+      0,
+      0,
+      0,
+    ];
+
+    const iAng = (spr.ang + 2048 - rooms.ang) & BUILD_ANGLE_MASK;
+    const cosang = buildTables.cos(iAng);
+    const sinang = buildTables.sin(iAng);
+    let dax = ((xspan >> 1) + xoff) * spr.xrepeat;
+    let day = ((yspan >> 1) + yoff) * spr.yrepeat;
+    rzi[0] += dmulscale12(sinang, dax, cosang, day);
+    rxi[0] += dmulscale12(sinang, day, -cosang, dax);
+
+    dax = xspan * spr.xrepeat;
+    day = yspan * spr.yrepeat;
+    rzi[1] = rzi[0] - mulscale12(sinang, dax);
+    rxi[1] = rxi[0] + mulscale12(cosang, dax);
+    dax = -mulscale12(cosang, day);
+    day = -mulscale12(sinang, day);
+    rzi[2] = rzi[1] + dax;
+    rxi[2] = rxi[1] + day;
+    rzi[3] = rzi[0] + dax;
+    rxi[3] = rxi[0] + day;
+
+    const ryi0 = scaleInt(spr.z - rooms.posz, rooms.yxaspect, 320 << 8);
+    if (ryi0 === 0) return;
+    const ryi = [ryi0, ryi0, ryi0, ryi0];
+
+    // Subset: require all corners in front of near plane
+    for (let z = 0; z < 4; z++) {
+      rzi[z] = mulscale16(rzi[z], rooms.viewingrange);
+      if (rzi[z] <= 256) return;
+    }
+
+    const { buffer } = this.renderer;
+    const half = buffer.halfxdimen;
+    const xdimen = buffer.xdimen;
+    const ydimen = buffer.ydimen;
+    /** @type {{ sx: number, sy: number, u: number, v: number }[]} */
+    const pts = [];
+    const uvs = [
+      [0, 0],
+      [xspan, 0],
+      [xspan, yspan],
+      [0, yspan],
+    ];
+    // Match cstat&4 corner order from C
+    const order = (cstat & 4) === 0 ? [0, 1, 2, 3] : [1, 0, 3, 2];
+    for (let oi = 0; oi < 4; oi++) {
+      const z = order[oi];
+      const sx = half + scaleInt(rxi[z], half, rzi[z]);
+      const sy =
+        rooms.globalhoriz + scaleInt(ryi[z], rooms.xdimenscale, rzi[z]);
+      pts.push({ sx, sy, u: uvs[oi][0], v: uvs[oi][1] });
+    }
+
+    // Rasterize as two triangles with affine UV (visible subset)
+    this.fillTexturedTri(rooms, tilenum, pts[0], pts[1], pts[2], spr.shade | 0);
+    this.fillTexturedTri(rooms, tilenum, pts[0], pts[2], pts[3], spr.shade | 0);
+  }
+
+  /**
+   * Affine textured triangle — floor-sprite subset (not full ceilspritehline).
+   * @param {import('./DrawRooms.js').DrawRooms} rooms
+   * @param {number} tilenum
+   * @param {{ sx: number, sy: number, u: number, v: number }} a
+   * @param {{ sx: number, sy: number, u: number, v: number }} b
+   * @param {{ sx: number, sy: number, u: number, v: number }} c
+   * @param {number} shade
+   */
+  fillTexturedTri(rooms, tilenum, a, b, c, shade) {
+    const xsiz = this.art.tilesizx[tilenum] | 0;
+    const ysiz = this.art.tilesizy[tilenum] | 0;
+    if (xsiz <= 0 || ysiz <= 0) return;
+    const { buffer } = this.renderer;
+    const xdimen = buffer.xdimen;
+    const ydimen = buffer.ydimen;
+    const pts = [a, b, c].sort((p, q) => p.sy - q.sy);
+    const [p0, p1, p2] = pts;
+    const y0 = Math.max(0, p0.sy | 0);
+    const y2 = Math.min(ydimen - 1, p2.sy | 0);
+    if (y2 < y0) return;
+
+    const shadeOff = this.renderer.palookup.shadeOffset(
+      Math.min(
+        this.renderer.palookup.numShades - 1,
+        Math.max(0, shade),
+      ),
+    );
+    const tables = this.renderer.palookup.tables;
+    const { pixels, ylookup, windowx1, windowy1 } = buffer;
+
+    const edgeInterp = (y, p, q) => {
+      const dy = q.sy - p.sy;
+      if (Math.abs(dy) < 1e-6) {
+        return { x: p.sx, u: p.u, v: p.v };
+      }
+      const t = (y - p.sy) / dy;
+      return {
+        x: p.sx + (q.sx - p.sx) * t,
+        u: p.u + (q.u - p.u) * t,
+        v: p.v + (q.v - p.v) * t,
+      };
+    };
+
+    for (let y = y0; y <= y2; y++) {
+      let L;
+      let R;
+      if (y < p1.sy || p1.sy === p0.sy) {
+        L = edgeInterp(y, p0, p2);
+        R = edgeInterp(y, p0, p1);
+      } else {
+        L = edgeInterp(y, p0, p2);
+        R = edgeInterp(y, p1, p2);
+      }
+      if (L.x > R.x) {
+        const t = L;
+        L = R;
+        R = t;
+      }
+      let x0 = Math.max(0, (L.x | 0) + 1);
+      let x1 = Math.min(xdimen - 1, R.x | 0);
+      // Clip to umost/dmost
+      const uClip = rooms.umost[x0] | 0;
+      const dClip = rooms.dmost[x0] | 0;
+      if (y < uClip || y >= dClip) continue;
+      if (x1 < x0) continue;
+      const dx = R.x - L.x;
+      for (let x = x0; x <= x1; x++) {
+        if (y < rooms.umost[x] || y >= rooms.dmost[x]) continue;
+        const t = dx !== 0 ? (x - L.x) / dx : 0;
+        let u = (L.u + (R.u - L.u) * t) | 0;
+        let v = (L.v + (R.v - L.v) * t) | 0;
+        u = ((u % xsiz) + xsiz) % xsiz;
+        v = ((v % ysiz) + ysiz) % ysiz;
+        const col = this.art.getColumn(tilenum, u);
+        if (!col) continue;
+        const texel = col[v] & 255;
+        if (texel === 255) continue;
+        pixels[ylookup[y + windowy1] + windowx1 + x] =
+          tables[shadeOff + texel];
+      }
+    }
   }
 
   /**

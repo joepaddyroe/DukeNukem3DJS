@@ -56,8 +56,8 @@ If you are picking up this project with no chat history:
 | **P2** | `drawrooms` walls + portals | Partial — bunch/`scansector`/`drawalls` port; wallmost approx |
 | **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align; slope approx) |
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
-| **P2** | `drawmasks` sprites | Partial (face + wall sprites) |
-| **P2** | Player movement + `clipmove` | Partial (`clipmove` walls; no pushmove/sprites) |
+| **P2** | `drawmasks` sprites | Partial — face/wall/floor sprites + maskwalls; floor = affine subset |
+| **P2** | Player movement + `clipmove` | Partial — wall clipmove/raytrace slide, pushmove, getzrange; no sprite clips |
 
 ---
 
@@ -276,8 +276,8 @@ Shell / canvas      ██████████  100%
 GRP / ART / palette █████████░   ~90%
 Board load          ████████░░   ~85%   E1L1 + updatesector/inside
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
-Player / clipmove   █████░░░░░   ~45%   clipmove walls; no pushmove
-drawmasks sprites   ████░░░░░░   ~40%   face + wall sprites; system pics filtered
+Player / clipmove   ███████░░░   ~70%   wall clipmove+pushmove+getzrange; no sprite clips
+drawmasks sprites   ██████░░░░   ~60%   face/wall/floor + maskwalls; floor affine subset
 ```
 
 ### 12.2 Done well
@@ -286,13 +286,14 @@ drawmasks sprites   ████░░░░░░   ~40%   face + wall sprites;
 |------|-----------|-------|
 | GRP/ART/palette | `grp/*` | From `DUKE3D.GRP` |
 | Map load | `engine/BoardLoader.js`, `SectorQuery.js` | Map v7 `E1L1.MAP`, APLAYER spawn, `getzsofslope` |
-| drawrooms | `render/DrawRooms.js`, `FlatPlane.js` | Portals, wall-align floors, LA sky, slope Z |
-| drawmasks | `render/DrawMasks.js` | Face sprites (no wall/floor/maskwall yet) |
+| drawrooms | `render/DrawRooms.js`, `FlatPlane.js`, `ParallaxSky.js` | Portals, floors, LA parascan sky |
+| drawmasks | `render/DrawMasks.js` | Face + wall sprites |
+| clipmove | `engine/ClipMove.js` | Wall collect, raytrace slide, pushmove, getzrange |
 | Look around | `platform/input/Keyboard.js` | WASD + turn |
 
 ### 12.3 Missing / next
 
-Full `parascan` psky strips, wall/floor sprites + maskwalls, `clipmove`, true `grouscan` slopes, bunch sorting, Duke play loop.
+Sprite clips in clipmove/getzrange, maskwalls, true `grouscan` slopes, Duke play loop.
 
 ---
 
@@ -306,7 +307,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P1 | GRP + ART + palette | Done | `grp/` · `CACHE1D.C`, `ENGINE.C` loadpics/loadpalette |
 | P1 | `loadboard` | Done | `engine/BoardLoader.js` · `ENGINE.C` |
 | P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `FlatPlane.js` · `ENGINE.C` |
-| P2 | `clipmove` + player | Partial — wall clipmove | `ClipMove.js` · `ENGINE.C` |
+| P2 | `clipmove` + player | Partial — walls + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
 | P2 | Sprites / masks | Partial (face) | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
 | P3 | Duke weapons / actors | Game feel | `ACTORS.C`, `PLAYER.C` |
 
@@ -411,6 +412,8 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | Wall sprites: perspective `lwall` U (ENGINE.C 3339) — fixes FOV-edge horizontal squash |
 | 2026-07-20 | Fix `krecipasm` to ENGINE.C reciptable/float path (was 2^32/n → wrong wall-sprite U scale) |
 | 2026-07-20 | Parallax sky: parascan subset (`radarang2`, psky LA, parallaxyscale, wallscan V) |
+| 2026-07-20 | clipmove v2: raytrace slide, wall pushmove, getzrange; `movePlayer` order |
+| 2026-07-20 | Maskwalls + floor sprites (affine subset); mvline skip 255; drawmasks interleave |
 
 ---
 

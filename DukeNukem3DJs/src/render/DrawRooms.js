@@ -20,7 +20,7 @@ import { setupFlatPlane, sampleFlatPlane } from './FlatPlane.js';
 import { HorizLookup, setupFlatScan, sampleFlatScan } from './FlatScan.js';
 import { BUILD_ANGLE_MASK } from '../core/renderConstants.js';
 import { pickSpawn, inside, EYEHEIGHT, getzsofslope } from '../engine/SectorQuery.js';
-import { clipmove, CLIPMASK0 } from '../engine/ClipMove.js';
+import { movePlayer, CLIPMASK0 } from '../engine/ClipMove.js';
 import { buildTables } from '../math/BuildTables.js';
 import { parallaxSky } from './ParallaxSky.js';
 
@@ -181,7 +181,7 @@ export class DrawRooms {
     const dx = ((forward * MOVE_SPEED * c - strafe * STRAFE_SPEED * s) >> 14) | 0;
     const dy = ((forward * MOVE_SPEED * s + strafe * STRAFE_SPEED * c) >> 14) | 0;
 
-    const moved = clipmove({
+    const moved = movePlayer({
       board: this.board,
       x: this.posx,
       y: this.posy,
@@ -1103,6 +1103,11 @@ export class DrawRooms {
     );
 
     if (nextsectnum >= 0 && (wal.cstat & 32) === 0 && nextsec) {
+      // ENGINE.C: masked mid walls drawn later in drawmasks
+      if ((wal.cstat & 48) === 16 && this.drawMasks) {
+        this.drawMasks.queueMaskWall(scan);
+      }
+
       const nz0 = getzsofslope(board, nextsectnum, wal.x, wal.y);
       const nz1 = getzsofslope(
         board,
@@ -1486,19 +1491,16 @@ export class DrawRooms {
     return (this.globalhoriz + (z * this.xdimenscale) / (d * 4096)) | 0;
   }
 
-  drawWallCol(x, y1, y2, tilenum, texX, ysiz, shade, swall, globalyscale, globalzd, vShift) {
+  drawWallCol(x, y1, y2, tilenum, texX, ysiz, shade, swall, globalyscale, globalzd, vShift, masked = false) {
     if (y2 < y1 || ysiz <= 0) return;
     const texcol = this.art.getColumn(tilenum, texX);
-    if (!texcol) {
-      // Missing ART column — skip (was solid palette 96)
-      return;
-    }
+    if (!texcol) return;
     const vinc = Math.imul(swall | 0, globalyscale | 0) | 0;
     const vplc =
       (globalzd + Math.imul(vinc, (y1 - this.globalhoriz + 1) | 0)) | 0;
     const shadeOff = this.renderer.palookup.shadeOffset(shade);
     const wy = this.renderer.buffer.windowy1;
-    this.renderer.vlines.draw({
+    const params = {
       x: this.renderer.buffer.windowx1 + x,
       y1: y1 + wy,
       y2: y2 + wy,
@@ -1508,7 +1510,9 @@ export class DrawRooms {
       texHeight: ysiz,
       shadeOffset: shadeOff,
       vShift,
-    });
+    };
+    if (masked) this.renderer.vlines.drawMasked(params);
+    else this.renderer.vlines.draw(params);
   }
 
   drawPlaneCol(x, y1, y2, scan, plane, fallbackColor) {

@@ -55,6 +55,11 @@ export function mulscale10(a, b) {
 }
 
 /** @param {number} a @param {number} b */
+export function mulscale12(a, b) {
+  return mulscale(a, b, 12);
+}
+
+/** @param {number} a @param {number} b */
 export function mulscale14(a, b) {
   return mulscale(a, b, 14);
 }
@@ -132,8 +137,18 @@ export function dmulscale6(a, b, c, d) {
 }
 
 /** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale8(a, b, c, d) {
+  return dmulscale(a, b, c, d, 8);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
 export function dmulscale10(a, b, c, d) {
   return dmulscale(a, b, c, d, 10);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale12(a, b, c, d) {
+  return dmulscale(a, b, c, d, 12);
 }
 
 /** @param {number} a @param {number} b @param {number} c @param {number} d */
@@ -214,6 +229,16 @@ export function divscale14(a, b) {
 /** @param {number} a @param {number} b */
 export function divscale16(a, b) {
   return divscale(a, b, 16);
+}
+
+/** @param {number} a @param {number} b */
+export function divscale18(a, b) {
+  return divscale(a, b, 18);
+}
+
+/** @param {number} a @param {number} b */
+export function divscale20(a, b) {
+  return divscale(a, b, 20);
 }
 
 /** @param {number} a @param {number} b */

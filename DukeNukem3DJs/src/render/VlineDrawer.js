@@ -112,4 +112,59 @@ export class VlineDrawer {
       }
     }
   }
+
+  /**
+   * maskwallscan / mvlineasm1 — skip transparent texel 255.
+   * @param {VlineParams} params
+   */
+  drawMasked(params) {
+    const {
+      x,
+      y1,
+      y2,
+      texcol,
+      texHeight,
+      shadeOffset,
+    } = params;
+
+    let top = y1 | 0;
+    let bot = y2 | 0;
+    const { windowy1, windowy2, pixels, ylookup, bytesperline } = this.buffer;
+
+    if (top < windowy1) top = windowy1;
+    if (bot > windowy2) bot = windowy2;
+    if (bot < top) return;
+
+    let vplc = params.vplc | 0;
+    const vinc = params.vinc | 0;
+    const vShift = params.vShift != null ? params.vShift | 0 : 16;
+    const tables = this.palookup.tables;
+    const mask = texHeight - 1;
+    const powerOfTwo = (texHeight & mask) === 0;
+
+    if (top !== (y1 | 0)) {
+      vplc = (vplc + Math.imul(top - (y1 | 0), vinc)) | 0;
+    }
+
+    let dest = ylookup[top] + x;
+    const shadeBase = shadeOffset | 0;
+
+    if (powerOfTwo) {
+      for (let y = top; y <= bot; y++) {
+        const texel = texcol[(vplc >>> vShift) & mask] & 255;
+        if (texel !== 255) pixels[dest] = tables[shadeBase + texel];
+        dest += bytesperline;
+        vplc = (vplc + vinc) | 0;
+      }
+    } else {
+      for (let y = top; y <= bot; y++) {
+        let v = (vplc >>> vShift) % texHeight;
+        if (v < 0) v += texHeight;
+        const texel = texcol[v] & 255;
+        if (texel !== 255) pixels[dest] = tables[shadeBase + texel];
+        dest += bytesperline;
+        vplc = (vplc + vinc) | 0;
+      }
+    }
+  }
 }
