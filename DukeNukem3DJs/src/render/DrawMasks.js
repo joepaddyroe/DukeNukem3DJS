@@ -5,10 +5,12 @@ import {
   dmulscale12,
   dmulscale32,
   divscale,
+  divscale16,
   divscale18,
   divscale30,
   krecipasm,
   klabs,
+  mulscale,
   mulscale2,
   mulscale8,
   mulscale9,
@@ -269,7 +271,7 @@ export class DrawMasks {
     if (item.kind === 'wall') {
       this.drawWallSprite(rooms, item.spr, item.yp);
     } else if (item.kind === 'floor') {
-      this.drawFloorSprite(rooms, item.spr);
+      this.drawFloorSprite(rooms, item.spr, item.yp);
     } else {
       this.drawFaceSprite(rooms, item.spr, item.xb, item.yp);
     }
@@ -403,16 +405,19 @@ export class DrawMasks {
   }
 
   /**
-   * ENGINE.C floor sprite (cstat&48)==32 — subset: in-front quads only.
+   * ENGINE.C floor sprite (cstat&48)==32 — ceilsprite + ceilspritehline.
    * @param {import('./DrawRooms.js').DrawRooms} rooms
    * @param {import('../engine/Board.js').Sprite} spr
+   * @param {number} yp spritesy depth
    */
-  drawFloorSprite(rooms, spr) {
+  drawFloorSprite(rooms, spr, yp) {
     const tilenum = spr.picnum & 0xffff;
     this.art.loadtile(tilenum);
     const xspan = this.art.tilesizx[tilenum] | 0;
     const yspan = this.art.tilesizy[tilenum] | 0;
     if (xspan <= 0 || yspan <= 0) return;
+    const gbuf = this.art.waloff[tilenum];
+    if (!gbuf) return;
 
     const cstat = spr.cstat | 0;
     if (cstat & 64) {
@@ -425,159 +430,479 @@ export class DrawMasks {
     if (cstat & 4) xoff = -xoff;
     if (cstat & 8) yoff = -yoff;
 
-    // ENGINE.C: rotate center into view (dmulscale10)
     const dax0 = (spr.x - rooms.posx) | 0;
     const day0 = (spr.y - rooms.posy) | 0;
-    let rzi = [
-      dmulscale10(rooms.cos, dax0, rooms.sin, day0),
-      0,
-      0,
-      0,
-    ];
-    let rxi = [
-      dmulscale10(rooms.cos, day0, -rooms.sin, dax0),
-      0,
-      0,
-      0,
-    ];
+    /** @type {number[]} */
+    const rzi = new Array(16);
+    /** @type {number[]} */
+    const rxi = new Array(16);
+    /** @type {number[]} */
+    const ryi = new Array(16);
+    rzi[0] = dmulscale10(rooms.cos, dax0, rooms.sin, day0);
+    rxi[0] = dmulscale10(rooms.cos, day0, -rooms.sin, dax0);
 
     const iAng = (spr.ang + 2048 - rooms.ang) & BUILD_ANGLE_MASK;
     const cosang = buildTables.cos(iAng);
     const sinang = buildTables.sin(iAng);
-    let dax = ((xspan >> 1) + xoff) * spr.xrepeat;
-    let day = ((yspan >> 1) + yoff) * spr.yrepeat;
-    rzi[0] += dmulscale12(sinang, dax, cosang, day);
-    rxi[0] += dmulscale12(sinang, day, -cosang, dax);
+    let dax = (((xspan >> 1) + xoff) * spr.xrepeat) | 0;
+    let day = (((yspan >> 1) + yoff) * spr.yrepeat) | 0;
+    rzi[0] = (rzi[0] + dmulscale12(sinang, dax, cosang, day)) | 0;
+    rxi[0] = (rxi[0] + dmulscale12(sinang, day, -cosang, dax)) | 0;
 
-    dax = xspan * spr.xrepeat;
-    day = yspan * spr.yrepeat;
-    rzi[1] = rzi[0] - mulscale12(sinang, dax);
-    rxi[1] = rxi[0] + mulscale12(cosang, dax);
+    dax = (xspan * spr.xrepeat) | 0;
+    day = (yspan * spr.yrepeat) | 0;
+    rzi[1] = (rzi[0] - mulscale12(sinang, dax)) | 0;
+    rxi[1] = (rxi[0] + mulscale12(cosang, dax)) | 0;
     dax = -mulscale12(cosang, day);
     day = -mulscale12(sinang, day);
-    rzi[2] = rzi[1] + dax;
-    rxi[2] = rxi[1] + day;
-    rzi[3] = rzi[0] + dax;
-    rxi[3] = rxi[0] + day;
+    rzi[2] = (rzi[1] + dax) | 0;
+    rxi[2] = (rxi[1] + day) | 0;
+    rzi[3] = (rzi[0] + dax) | 0;
+    rxi[3] = (rxi[0] + day) | 0;
 
     const ryi0 = scaleInt(spr.z - rooms.posz, rooms.yxaspect, 320 << 8);
     if (ryi0 === 0) return;
-    const ryi = [ryi0, ryi0, ryi0, ryi0];
+    ryi[0] = ryi[1] = ryi[2] = ryi[3] = ryi0;
 
-    // Subset: require all corners in front of near plane
-    for (let z = 0; z < 4; z++) {
-      rzi[z] = mulscale16(rzi[z], rooms.viewingrange);
-      if (rzi[z] <= 256) return;
+    let z;
+    let z1;
+    let z2;
+    if ((cstat & 4) === 0) {
+      z = 0;
+      z1 = 1;
+      z2 = 3;
+    } else {
+      z = 1;
+      z1 = 0;
+      z2 = 2;
     }
 
-    const { buffer } = this.renderer;
-    const half = buffer.halfxdimen;
-    const xdimen = buffer.xdimen;
-    const ydimen = buffer.ydimen;
-    /** @type {{ sx: number, sy: number, u: number, v: number }[]} */
-    const pts = [];
-    const uvs = [
-      [0, 0],
-      [xspan, 0],
-      [xspan, yspan],
-      [0, yspan],
-    ];
-    // Match cstat&4 corner order from C
-    const order = (cstat & 4) === 0 ? [0, 1, 2, 3] : [1, 0, 3, 2];
-    for (let oi = 0; oi < 4; oi++) {
-      const z = order[oi];
-      const sx = half + scaleInt(rxi[z], half, rzi[z]);
-      const sy =
-        rooms.globalhoriz + scaleInt(ryi[z], rooms.xdimenscale, rzi[z]);
-      pts.push({ sx, sy, u: uvs[oi][0], v: uvs[oi][1] });
+    dax = (rzi[z1] - rzi[z]) | 0;
+    day = (rxi[z1] - rxi[z]) | 0;
+    let bot = dmulscale8(dax, dax, day, day);
+    if (klabs(dax) >> 13 >= bot || klabs(day) >> 13 >= bot) return;
+    let globalx1 = divscale18(dax, bot);
+    let globalx2 = divscale18(day, bot);
+
+    dax = (rzi[z2] - rzi[z]) | 0;
+    day = (rxi[z2] - rxi[z]) | 0;
+    bot = dmulscale8(dax, dax, day, day);
+    if (klabs(dax) >> 13 >= bot || klabs(day) >> 13 >= bot) return;
+    let globaly1 = divscale18(dax, bot);
+    let globaly2 = divscale18(day, bot);
+
+    let globalxpanning = (rxi[z] << 12) | 0;
+    let globalypanning = (rzi[z] << 12) | 0;
+    let globalzd = (ryi[z] << 12) | 0;
+
+    const vr = rooms.viewingrange | 0;
+    rzi[0] = mulscale16(rzi[0], vr);
+    rzi[1] = mulscale16(rzi[1], vr);
+    rzi[2] = mulscale16(rzi[2], vr);
+    rzi[3] = mulscale16(rzi[3], vr);
+
+    if (ryi[0] < 0) {
+      let t = rxi[1];
+      rxi[1] = rxi[3];
+      rxi[3] = t;
+      t = rzi[1];
+      rzi[1] = rzi[3];
+      rzi[3] = t;
     }
 
-    // Rasterize as two triangles with affine UV (visible subset)
-    this.fillTexturedTri(rooms, tilenum, pts[0], pts[1], pts[2], spr.shade | 0);
-    this.fillTexturedTri(rooms, tilenum, pts[0], pts[2], pts[3], spr.shade | 0);
-  }
+    // Clip polygon in view space (4 frustum edges) — ENGINE.C 3589–3686
+    let npoints = 4;
+    /** @type {number[]} */
+    let rxi2 = new Array(16);
+    /** @type {number[]} */
+    let ryi2 = new Array(16);
+    /** @type {number[]} */
+    let rzi2 = new Array(16);
 
-  /**
-   * Affine textured triangle — floor-sprite subset (not full ceilspritehline).
-   * @param {import('./DrawRooms.js').DrawRooms} rooms
-   * @param {number} tilenum
-   * @param {{ sx: number, sy: number, u: number, v: number }} a
-   * @param {{ sx: number, sy: number, u: number, v: number }} b
-   * @param {{ sx: number, sy: number, u: number, v: number }} c
-   * @param {number} shade
-   */
-  fillTexturedTri(rooms, tilenum, a, b, c, shade) {
-    const xsiz = this.art.tilesizx[tilenum] | 0;
-    const ysiz = this.art.tilesizy[tilenum] | 0;
-    if (xsiz <= 0 || ysiz <= 0) return;
+    // Edge 1: rxi+rzi >= 0
+    let npoints2 = 0;
+    let zzsgn = (rxi[0] + rzi[0]) | 0;
+    for (z = 0; z < npoints; z++) {
+      let zz = z + 1;
+      if (zz === npoints) zz = 0;
+      const zsgn = zzsgn;
+      zzsgn = (rxi[zz] + rzi[zz]) | 0;
+      if (zsgn >= 0) {
+        rxi2[npoints2] = rxi[z];
+        ryi2[npoints2] = ryi[z];
+        rzi2[npoints2] = rzi[z];
+        npoints2++;
+      }
+      if ((zsgn ^ zzsgn) < 0) {
+        const t = divscale30(zsgn, (zsgn - zzsgn) | 0);
+        rxi2[npoints2] = (rxi[z] + mulscale30(t, (rxi[zz] - rxi[z]) | 0)) | 0;
+        ryi2[npoints2] = (ryi[z] + mulscale30(t, (ryi[zz] - ryi[z]) | 0)) | 0;
+        rzi2[npoints2] = (rzi[z] + mulscale30(t, (rzi[zz] - rzi[z]) | 0)) | 0;
+        npoints2++;
+      }
+    }
+    if (npoints2 <= 2) return;
+
+    // Edge 2: rxi-rzi <= 0
+    npoints = 0;
+    zzsgn = (rxi2[0] - rzi2[0]) | 0;
+    for (z = 0; z < npoints2; z++) {
+      let zz = z + 1;
+      if (zz === npoints2) zz = 0;
+      const zsgn = zzsgn;
+      zzsgn = (rxi2[zz] - rzi2[zz]) | 0;
+      if (zsgn <= 0) {
+        rxi[npoints] = rxi2[z];
+        ryi[npoints] = ryi2[z];
+        rzi[npoints] = rzi2[z];
+        npoints++;
+      }
+      if ((zsgn ^ zzsgn) < 0) {
+        const t = divscale30(zsgn, (zsgn - zzsgn) | 0);
+        rxi[npoints] =
+          (rxi2[z] + mulscale30(t, (rxi2[zz] - rxi2[z]) | 0)) | 0;
+        ryi[npoints] =
+          (ryi2[z] + mulscale30(t, (ryi2[zz] - ryi2[z]) | 0)) | 0;
+        rzi[npoints] =
+          (rzi2[z] + mulscale30(t, (rzi2[zz] - rzi2[z]) | 0)) | 0;
+        npoints++;
+      }
+    }
+    if (npoints <= 2) return;
+
     const { buffer } = this.renderer;
+    const halfxdimen = buffer.halfxdimen;
     const xdimen = buffer.xdimen;
     const ydimen = buffer.ydimen;
-    const pts = [a, b, c].sort((p, q) => p.sy - q.sy);
-    const [p0, p1, p2] = pts;
-    const y0 = Math.max(0, p0.sy | 0);
-    const y2 = Math.min(ydimen - 1, p2.sy | 0);
-    if (y2 < y0) return;
+    const globalhoriz = rooms.globalhoriz | 0;
+
+    // Edge 3: top of screen
+    npoints2 = 0;
+    zzsgn =
+      Math.imul(ryi[0], halfxdimen) + Math.imul(rzi[0], globalhoriz - 0);
+    for (z = 0; z < npoints; z++) {
+      let zz = z + 1;
+      if (zz === npoints) zz = 0;
+      const zsgn = zzsgn;
+      zzsgn =
+        Math.imul(ryi[zz], halfxdimen) +
+        Math.imul(rzi[zz], globalhoriz - 0);
+      if (zsgn >= 0) {
+        rxi2[npoints2] = rxi[z];
+        ryi2[npoints2] = ryi[z];
+        rzi2[npoints2] = rzi[z];
+        npoints2++;
+      }
+      if ((zsgn ^ zzsgn) < 0) {
+        const t = divscale30(zsgn, (zsgn - zzsgn) | 0);
+        rxi2[npoints2] = (rxi[z] + mulscale30(t, (rxi[zz] - rxi[z]) | 0)) | 0;
+        ryi2[npoints2] = (ryi[z] + mulscale30(t, (ryi[zz] - ryi[z]) | 0)) | 0;
+        rzi2[npoints2] = (rzi[z] + mulscale30(t, (rzi[zz] - rzi[z]) | 0)) | 0;
+        npoints2++;
+      }
+    }
+    if (npoints2 <= 2) return;
+
+    // Edge 4: bottom of screen
+    npoints = 0;
+    zzsgn =
+      Math.imul(ryi2[0], halfxdimen) +
+      Math.imul(rzi2[0], (globalhoriz - ydimen) | 0);
+    for (z = 0; z < npoints2; z++) {
+      let zz = z + 1;
+      if (zz === npoints2) zz = 0;
+      const zsgn = zzsgn;
+      zzsgn =
+        Math.imul(ryi2[zz], halfxdimen) +
+        Math.imul(rzi2[zz], (globalhoriz - ydimen) | 0);
+      if (zsgn <= 0) {
+        rxi[npoints] = rxi2[z];
+        ryi[npoints] = ryi2[z];
+        rzi[npoints] = rzi2[z];
+        npoints++;
+      }
+      if ((zsgn ^ zzsgn) < 0) {
+        const t = divscale30(zsgn, (zsgn - zzsgn) | 0);
+        rxi[npoints] =
+          (rxi2[z] + mulscale30(t, (rxi2[zz] - rxi2[z]) | 0)) | 0;
+        ryi[npoints] =
+          (ryi2[z] + mulscale30(t, (ryi2[zz] - ryi2[z]) | 0)) | 0;
+        rzi[npoints] =
+          (rzi2[z] + mulscale30(t, (rzi2[zz] - rzi2[z]) | 0)) | 0;
+        npoints++;
+      }
+    }
+    if (npoints <= 2) return;
+
+    // Project
+    const xsi = new Int32Array(npoints);
+    const ysi = new Int32Array(npoints);
+    let lpoint = -1;
+    let lmax = 0x7fffffff;
+    let rpoint = -1;
+    let rmax = -0x80000000;
+    for (z = 0; z < npoints; z++) {
+      xsi[z] =
+        (scaleInt(rxi[z], xdimen << 15, rzi[z]) + (xdimen << 15)) | 0;
+      ysi[z] =
+        (scaleInt(ryi[z], xdimen << 15, rzi[z]) + (globalhoriz << 16)) | 0;
+      if (xsi[z] < 0) xsi[z] = 0;
+      if (xsi[z] > (xdimen << 16)) xsi[z] = xdimen << 16;
+      if (ysi[z] < 0) ysi[z] = 0;
+      if (ysi[z] > (ydimen << 16)) ysi[z] = ydimen << 16;
+      if (xsi[z] < lmax) {
+        lmax = xsi[z];
+        lpoint = z;
+      }
+      if (xsi[z] > rmax) {
+        rmax = xsi[z];
+        rpoint = z;
+      }
+    }
+    if (lpoint < 0 || rpoint < 0) return;
+
+    const uwall = new Int16Array(xdimen);
+    const dwall = new Int16Array(xdimen);
+    uwall.fill(0);
+    dwall.fill(ydimen);
+
+    // uwall (top edges lpoint → rpoint)
+    for (z = lpoint; z !== rpoint; ) {
+      let zz = z + 1;
+      if (zz === npoints) zz = 0;
+      const dax1 = ((xsi[z] + 65535) >> 16) | 0;
+      const dax2 = ((xsi[zz] + 65535) >> 16) | 0;
+      if (dax2 > dax1) {
+        const yinc = divscale16(ysi[zz] - ysi[z], xsi[zz] - xsi[z]);
+        let y =
+          (ysi[z] + mulscale16(((dax1 << 16) - xsi[z]) | 0, yinc)) | 0;
+        for (let x = dax1; x < dax2; x++) {
+          uwall[x] = y >> 16;
+          y = (y + yinc) | 0;
+        }
+      }
+      z = zz;
+    }
+
+    // dwall (bottom edges rpoint → lpoint)
+    for (; z !== lpoint; ) {
+      let zz = z + 1;
+      if (zz === npoints) zz = 0;
+      const dax1 = ((xsi[zz] + 65535) >> 16) | 0;
+      const dax2 = ((xsi[z] + 65535) >> 16) | 0;
+      if (dax2 > dax1) {
+        const yinc = divscale16(ysi[zz] - ysi[z], xsi[zz] - xsi[z]);
+        let y =
+          (ysi[zz] + mulscale16(((dax1 << 16) - xsi[zz]) | 0, yinc)) | 0;
+        for (let x = dax1; x < dax2; x++) {
+          dwall[x] = y >> 16;
+          y = (y + yinc) | 0;
+        }
+      }
+      z = zz;
+    }
+
+    let lx = ((lmax + 65535) >> 16) | 0;
+    let rx = ((rmax + 65535) >> 16) | 0;
+    if (lx < 0) lx = 0;
+    if (rx >= xdimen) rx = xdimen - 1;
+    if (lx > rx) return;
+
+    for (let x = lx; x <= rx; x++) {
+      if (uwall[x] < rooms.umost[x]) uwall[x] = rooms.umost[x];
+      if (dwall[x] > rooms.dmost[x]) dwall[x] = rooms.dmost[x];
+    }
+
+    // ENGINE.C floor-sprite smost clip
+    const board = rooms.board;
+    if (board) {
+      for (let i = this.smostwallcnt - 1; i >= 0; i--) {
+        const j = this.smostwall[i];
+        if (rooms.xb1[j] > rx || rooms.xb2[j] < lx) continue;
+        if (yp <= rooms.yb1[j] && yp <= rooms.yb2[j]) continue;
+
+        const wallnum = rooms.thewall[j];
+        const wal = board.walls[wallnum];
+        const wal2 = board.walls[wal.point2];
+        let xFront =
+          Math.imul(wal2.x - wal.x, spr.y - wal.y) -
+          Math.imul(spr.x - wal.x, wal2.y - wal.y);
+        if (yp > rooms.yb1[j] && yp > rooms.yb2[j]) xFront = -1;
+        if (
+          xFront >= 0 &&
+          (xFront !== 0 || wal.nextsector !== spr.sectnum)
+        ) {
+          continue;
+        }
+
+        const dalx2 = Math.max(rooms.xb1[j], lx);
+        const darx2 = Math.min(rooms.xb2[j], rx);
+        const typ = this.smostwalltype[i];
+        if (typ === 0) {
+          if (dalx2 <= darx2) {
+            if (dalx2 === lx && darx2 === rx) return;
+            for (let x = dalx2; x <= darx2; x++) dwall[x] = 0;
+          }
+        } else if (typ === 1) {
+          const k = this.smoststart[i] - rooms.xb1[j];
+          for (let x = dalx2; x <= darx2; x++) {
+            const v = this.smost[k + x];
+            if (v > uwall[x]) uwall[x] = v;
+          }
+        } else if (typ === 2) {
+          const k = this.smoststart[i] - rooms.xb1[j];
+          for (let x = dalx2; x <= darx2; x++) {
+            const v = this.smost[k + x];
+            if (v < dwall[x]) dwall[x] = v;
+          }
+        }
+      }
+    }
+
+    // UV globals for ceilspritehline (picsiz-style floor log)
+    let glogx = 15;
+    while (glogx > 1 && (1 << glogx) > xspan) glogx--;
+    let glogy = 15;
+    while (glogy > 1 && (1 << glogy) > yspan) glogy--;
+    if ((1 << glogx) !== xspan) {
+      glogx++;
+      globalx1 = mulscale(globalx1, xspan, glogx);
+      globalx2 = mulscale(globalx2, xspan, glogx);
+    }
+
+    dax = globalxpanning;
+    day = globalypanning;
+    globalxpanning = -dmulscale6(globalx1, day, globalx2, dax);
+    globalypanning = -dmulscale6(globaly1, day, globaly2, dax);
+
+    const viewingrangerecip = buffer.viewingrangerecip ?? 65536;
+    globalx2 = mulscale16(globalx2, vr);
+    globaly2 = mulscale16(globaly2, vr);
+    globalzd = mulscale16(globalzd, viewingrangerecip);
+
+    globalx1 = Math.imul(globalx1 - globalx2, halfxdimen) | 0;
+    globaly1 = Math.imul(globaly1 - globaly2, halfxdimen) | 0;
 
     const shadeOff = this.renderer.palookup.shadeOffset(
       Math.min(
         this.renderer.palookup.numShades - 1,
-        Math.max(0, shade),
+        Math.max(0, spr.shade | 0),
       ),
     );
-    const tables = this.renderer.palookup.tables;
-    const { pixels, ylookup, windowx1, windowy1 } = buffer;
 
-    const edgeInterp = (y, p, q) => {
-      const dy = q.sy - p.sy;
-      if (Math.abs(dy) < 1e-6) {
-        return { x: p.sx, u: p.u, v: p.v };
-      }
-      const t = (y - p.sy) / dy;
-      return {
-        x: p.sx + (q.sx - p.sx) * t,
-        u: p.u + (q.u - p.u) * t,
-        v: p.v + (q.v - p.v) * t,
-      };
-    };
+    this.ceilspriteScan(rooms, {
+      lx,
+      rx: rx - 1,
+      uwall,
+      dwall,
+      globalx1,
+      globalx2,
+      globaly1,
+      globaly2,
+      globalxpanning,
+      globalypanning,
+      globalzd,
+      glogx,
+      glogy,
+      gbuf,
+      shadeOff,
+    });
+  }
 
-    for (let y = y0; y <= y2; y++) {
-      let L;
-      let R;
-      if (y < p1.sy || p1.sy === p0.sy) {
-        L = edgeInterp(y, p0, p2);
-        R = edgeInterp(y, p0, p1);
+  /**
+   * ENGINE.C ceilspritescan + lastx bookkeeping
+   * @param {import('./DrawRooms.js').DrawRooms} rooms
+   * @param {object} st
+   */
+  ceilspriteScan(rooms, st) {
+    const { lx, rx, uwall, dwall } = st;
+    if (rx < lx) return;
+    const lastx = new Int16Array(this.renderer.buffer.ydimen + 2);
+    st._lastx = lastx;
+    let y1 = uwall[lx] | 0;
+    let y2 = y1;
+    let x;
+    for (x = lx; x <= rx; x++) {
+      const twall = (uwall[x] - 1) | 0;
+      const bwall = dwall[x] | 0;
+      if (twall < bwall - 1) {
+        if (twall >= y2) {
+          while (y1 < y2 - 1) this.ceilspriteHline(rooms, st, x - 1, ++y1);
+          y1 = twall;
+        } else {
+          while (y1 < twall) this.ceilspriteHline(rooms, st, x - 1, ++y1);
+          while (y1 > twall) lastx[y1--] = x;
+        }
+        while (y2 > bwall) this.ceilspriteHline(rooms, st, x - 1, --y2);
+        while (y2 < bwall) lastx[y2++] = x;
       } else {
-        L = edgeInterp(y, p0, p2);
-        R = edgeInterp(y, p1, p2);
+        while (y1 < y2 - 1) this.ceilspriteHline(rooms, st, x - 1, ++y1);
+        if (x === rx) break;
+        y1 = uwall[x + 1] | 0;
+        y2 = y1;
       }
-      if (L.x > R.x) {
-        const t = L;
-        L = R;
-        R = t;
+    }
+    while (y1 < y2 - 1) this.ceilspriteHline(rooms, st, rx, ++y1);
+  }
+
+  /**
+   * ENGINE.C ceilspritehline — perspective UV via horizlookup + mhline.
+   * @param {import('./DrawRooms.js').DrawRooms} rooms
+   * @param {object} st
+   * @param {number} x2
+   * @param {number} y
+   */
+  ceilspriteHline(rooms, st, x2, y) {
+    const lastx = st._lastx;
+    if (!lastx || y < 0 || y >= lastx.length) return;
+    const x1 = lastx[y] | 0;
+    if (x2 < x1) return;
+
+    const hl = rooms._horizLookup;
+    const idx = (y - rooms.globalhoriz + hl.horizycent) | 0;
+    if (idx < 0 || idx >= hl.horizlookup.length) return;
+    const v = mulscale20(st.globalzd, hl.horizlookup[idx]);
+
+    let bx =
+      (mulscale14(
+        Math.imul(st.globalx2, x1) + st.globalx1,
+        v,
+      ) +
+        st.globalxpanning) |
+      0;
+    let by =
+      (mulscale14(
+        Math.imul(st.globaly2, x1) + st.globaly1,
+        v,
+      ) +
+        st.globalypanning) |
+      0;
+    const xinc = mulscale14(st.globalx2, v);
+    const yinc = mulscale14(st.globaly2, v);
+
+    const { buffer } = this.renderer;
+    const { pixels, ylookup, windowx1, windowy1 } = buffer;
+    const tables = this.renderer.palookup.tables;
+    const shadeOff = st.shadeOff;
+    const gbuf = st.gbuf;
+    const glogx = st.glogx;
+    const glogy = st.glogy;
+    const xBits = (32 - glogx) | 0;
+    const yBits = (32 - glogy) | 0;
+    const row = (ylookup[(y + windowy1) | 0] + windowx1) | 0;
+
+    for (let x = x1; x <= x2; x++) {
+      const u = bx >>> 0;
+      const vv = by >>> 0;
+      const tidx = ((u >>> xBits) << glogy) + (vv >>> yBits);
+      if (tidx >= 0 && tidx < gbuf.length) {
+        const texel = gbuf[tidx] & 255;
+        if (texel !== 255) {
+          pixels[row + x] = tables[shadeOff + texel];
+        }
       }
-      let x0 = Math.max(0, (L.x | 0) + 1);
-      let x1 = Math.min(xdimen - 1, R.x | 0);
-      // Clip to umost/dmost
-      const uClip = rooms.umost[x0] | 0;
-      const dClip = rooms.dmost[x0] | 0;
-      if (y < uClip || y >= dClip) continue;
-      if (x1 < x0) continue;
-      const dx = R.x - L.x;
-      for (let x = x0; x <= x1; x++) {
-        if (y < rooms.umost[x] || y >= rooms.dmost[x]) continue;
-        const t = dx !== 0 ? (x - L.x) / dx : 0;
-        let u = (L.u + (R.u - L.u) * t) | 0;
-        let v = (L.v + (R.v - L.v) * t) | 0;
-        u = ((u % xsiz) + xsiz) % xsiz;
-        v = ((v % ysiz) + ysiz) % ysiz;
-        const col = this.art.getColumn(tilenum, u);
-        if (!col) continue;
-        const texel = col[v] & 255;
-        if (texel === 255) continue;
-        pixels[ylookup[y + windowy1] + windowx1 + x] =
-          tables[shadeOff + texel];
-      }
+      bx = (bx + xinc) | 0;
+      by = (by + yinc) | 0;
     }
   }
 
@@ -591,7 +916,9 @@ export class DrawMasks {
     const x1 = wal.x;
     const y1 = wal.y;
     const wal2 = board.walls[wal.point2];
-    return dmulscale32(wal2.x - x1, spr.y - y1, -(spr.x - x1), wal2.y - y1) >= 0;
+    return (
+      dmulscale32(wal2.x - x1, spr.y - y1, -(spr.x - x1), wal2.y - y1) >= 0
+    );
   }
 
   /**

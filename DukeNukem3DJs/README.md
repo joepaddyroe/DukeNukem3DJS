@@ -56,7 +56,7 @@ If you are picking up this project with no chat history:
 5. Respect **§2–3** (SOLID + layers) before editing.
 6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-20):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`** walls + blocking sprites. 4:3 presentation.
+**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** (`ceilsprite`) + maskwalls. **`clipmove`** walls + blocking sprites. 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -68,7 +68,7 @@ If you are picking up this project with no chat history:
 | **P2** | `drawrooms` walls + portals | Partial — bunch/`scansector`/`drawalls` port; wallmost approx |
 | **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align + grouscan slopes) |
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
-| **P2** | `drawmasks` sprites | Partial — face/wall/floor sprites + maskwalls; floor = affine subset |
+| **P2** | `drawmasks` sprites | Partial — face/wall/floor (ceilsprite) + maskwalls |
 | **P2** | Player movement + `clipmove` | Partial — walls + sprite clips (face/wall/floor) + getzrange/pushmove |
 
 ---
@@ -247,7 +247,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started
 - [x] `BoardLoader` — `loadboard` sector/wall/sprite arrays (map v7)
 - [x] Sector / wall / sprite types matching `BUILD.H`
 - [x] `updatesector` / `inside` (`SectorQuery.js`)
-- [ ] Full `clipmove` / `getzrange`
+- [x] `clipmove` / `getzrange` (walls + sprites) / `pushmove`
 
 ### Phase 3 — Render (Build software)
 - [x] `ViewBuffer` / `VlineDrawer` / `HlineDrawer` / `Palookup`
@@ -258,12 +258,12 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started
 - [ ] Full bunch/`scansector` parity with `ENGINE.C`
 - [x] Sloped floors/ceilings (`Grouscan.js` · ENGINE.C `grouscan`)
 - [ ] Parallax skies (`parascan`) full parity / slope `slopalookup` fog
-- [ ] `drawmasks` sprites / masked walls
+- [x] `drawmasks` face/wall/floor (`ceilsprite`) + maskwalls
 
 ### Phase 4 — Play simulation
 - [x] Player spawn from board (APLAYER / map header)
-- [x] WASD + turn look (no collision)
-- [ ] `clipmove` / `getzrange` / movement
+- [x] WASD + turn look
+- [x] `clipmove` / `getzrange` / movement
 - [ ] Weapons, inventory, damage (Duke game)
 - [ ] Actors (`ACTORS.C`), sector effects (`SECTOR.C`)
 - [ ] CON interpreter (`GAMEDEF.C`) as needed
@@ -294,7 +294,7 @@ GRP / ART / palette █████████░   ~90%
 Board load          ████████░░   ~85%   E1L1 + updatesector/inside
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
 Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
-drawmasks sprites   ██████░░░░   ~60%   face/wall/floor + maskwalls; floor affine subset
+drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceilsprite + maskwalls
 ```
 
 ### 12.2 Done well
@@ -304,13 +304,13 @@ drawmasks sprites   ██████░░░░   ~60%   face/wall/floor + ma
 | GRP/ART/palette | `grp/*` | From `DUKE3D.GRP` |
 | Map load | `engine/BoardLoader.js`, `SectorQuery.js` | Map v7 `E1L1.MAP`, APLAYER spawn, `getzsofslope` |
 | drawrooms | `render/DrawRooms.js`, `FlatScan.js`, `Grouscan.js`, `ParallaxSky.js` | Portals, flats, grouscan slopes, LA parascan sky |
-| drawmasks | `render/DrawMasks.js` | Face + wall sprites |
+| drawmasks | `render/DrawMasks.js` | Face + wall + floor (`ceilsprite`) + maskwalls |
 | clipmove | `engine/ClipMove.js` | Wall + sprite clips, raytrace slide, pushmove, getzrange |
 | Look around | `platform/input/Keyboard.js` | WASD + turn |
 
 ### 12.3 Missing / next
 
-Full floor-sprite `ceilsprite`, slope distance fog (`slopalookup`), Duke play loop.
+Slope distance fog (`slopalookup`), Duke play loop.
 
 ---
 
@@ -325,7 +325,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P1 | `loadboard` | Done | `engine/BoardLoader.js` · `ENGINE.C` |
 | P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `Grouscan.js`, `FlatScan.js` · `ENGINE.C` |
 | P2 | `clipmove` + player | Partial — walls + sprites + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
-| P2 | Sprites / masks | Partial (face) | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
+| P2 | Sprites / masks | Partial — face/wall/floor ceilsprite | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
 | P3 | Duke weapons / actors | Game feel | `ACTORS.C`, `PLAYER.C` |
 
 ---
@@ -435,6 +435,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | Maskwalls + floor sprites (affine subset); mvline skip 255; drawmasks interleave |
 | 2026-07-20 | True `grouscan` slopes (`Grouscan.js` + JFBuild-style `slopevlin`); replace FlatPlane slope approx |
 | 2026-07-20 | Sprite clips in `clipmove`/`getzrange` (face/wall/floor; CLIPMASK0); pass ART for tilesiz/picanm |
+| 2026-07-21 | Floor sprites: ENGINE.C `ceilsprite`/`ceilspritehline` (frustum clip + horizlookup UV); replace affine tris |
 
 ---
 
