@@ -5,7 +5,7 @@
 import { TICSPERFRAME } from '../core/gameConstants.js';
 import { BUILD_ANGLE_MASK } from '../core/renderConstants.js';
 import { clipmove, pushmove, getzrange, CLIPMASK0 } from '../engine/ClipMove.js';
-import { klabs, mulscale } from '../math/fixed.js';
+import { klabs, mulscale, nsqrtasm } from '../math/fixed.js';
 import { buildTables } from '../math/BuildTables.js';
 import { BIT_CROUCH, BIT_JUMP } from './GetInput.js';
 
@@ -228,4 +228,22 @@ export function processInput(p, board, art, sync) {
     p.posy = pushed.y;
     p.cursectnum = pushed.sectnum >= 0 ? pushed.sectnum : r.sectnum;
   }
+
+  // --- weapon sway (PLAYER.C ~2636) ---
+  if ((p.bobvel | 0) < 32 || p.on_ground === 0 || (p.bobcounter | 0) === 1024) {
+    const ws = p.weapon_sway & 2047;
+    if (ws > 1024 + 96) p.weapon_sway -= 96;
+    else if (ws < 1024 - 96) p.weapon_sway += 96;
+    else p.weapon_sway = 1024;
+  } else {
+    p.weapon_sway = p.bobcounter | 0;
+  }
+
+  const dx = (p.posx - p.bobposx) | 0;
+  const dy = (p.posy - p.bobposy) | 0;
+  p.bobvel = nsqrtasm(Math.imul(dx, dx) + Math.imul(dy, dy));
+  if (p.on_ground) p.bobcounter = (p.bobcounter + (p.bobvel >> 1)) | 0;
+
+  p.bobposx = p.posx;
+  p.bobposy = p.posy;
 }

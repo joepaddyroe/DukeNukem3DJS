@@ -30,8 +30,15 @@ export class Player {
     this.curr_weapon = 0;
     this.kickback_pic = 0;
     this.weapon_pos = 0;
-    /** PLAYER.C weapon_sway — rest is 1024 */
+    /** PLAYER.C weapon_sway — rest is 1024; tracks bobcounter while walking */
     this.weapon_sway = 1024;
+    /** PLAYER.C bobcounter — walk phase for weapon/view bob */
+    this.bobcounter = 0;
+    this.bobposx = 0;
+    this.bobposy = 0;
+    /** Last-frame move distance (sprite.xvel stand-in for bob) */
+    this.bobvel = 0;
+    this.weapon_ang = 0;
     this.look_ang = 0;
     this.toggle_key_flag = 0;
     /** @type {string|null} */
@@ -72,6 +79,11 @@ export class Player {
     this.kickback_pic = 0;
     this.weapon_pos = 0;
     this.weapon_sway = 1024;
+    this.bobcounter = 0;
+    this.bobposx = this.posx;
+    this.bobposy = this.posy;
+    this.bobvel = 0;
+    this.weapon_ang = 0;
     this.look_ang = 0;
     this.toggle_key_flag = 0;
     this.lastUse = null;

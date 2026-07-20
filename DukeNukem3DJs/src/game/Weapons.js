@@ -213,6 +213,20 @@ function displayGunPos(p) {
 }
 
 /**
+ * PLAYER.C displayweapon weapon_xoffset (horizontal sway).
+ * @param {import('./Player.js').Player} p
+ */
+function displayWeaponXOffset(p) {
+  if (!buildTables.loaded) buildTables.generateFallback();
+  const st = buildTables.sintable;
+  const sway = (p.weapon_sway ?? 1024) | 0;
+  let ox = 160 - 90;
+  ox -= ((st[((sway >> 1) + 512) & 2047] | 0) / (1024 + 512)) | 0;
+  ox -= 58 + (p.weapon_ang | 0);
+  return ox;
+}
+
+/**
  * Pistol tile for HUD (PLAYER.C displayweapons PISTOL_WEAPON frames).
  * @param {import('./Player.js').Player} p
  * @returns {{ pic: number, x: number, y: number }[]}
@@ -220,6 +234,7 @@ function displayGunPos(p) {
 export function pistolHudTiles(p) {
   const kb = p.kickback_pic | 0;
   const gunPos = displayGunPos(p);
+  const weaponXOffset = displayWeaponXOffset(p);
   const lookingArc = ((p.look_ang | 0) < 0 ? -(p.look_ang | 0) : (p.look_ang | 0)) / 9 | 0;
   const look = (p.look_ang | 0) >> 1;
   /** @type {{ pic: number, x: number, y: number }[]} */
@@ -227,7 +242,7 @@ export function pistolHudTiles(p) {
 
   if (kb < 5) {
     const frame = PISTOL_KB_FRAMES[kb] ?? 0;
-    let l = 195 - 12;
+    let l = 195 - 12 + weaponXOffset;
     if (kb === 2) l -= 3;
     out.push({
       pic: FIRSTGUN + frame,
