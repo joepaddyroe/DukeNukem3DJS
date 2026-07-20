@@ -40,6 +40,11 @@ export function mulscale8(a, b) {
 }
 
 /** @param {number} a @param {number} b */
+export function mulscale9(a, b) {
+  return mulscale(a, b, 9);
+}
+
+/** @param {number} a @param {number} b */
 export function mulscale10(a, b) {
   return mulscale(a, b, 10);
 }
@@ -57,6 +62,11 @@ export function mulscale15(a, b) {
 /** @param {number} a @param {number} b */
 export function mulscale16(a, b) {
   return mulscale(a, b, 16);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale18(a, b) {
+  return mulscale(a, b, 18);
 }
 
 /** @param {number} a @param {number} b */
@@ -122,8 +132,49 @@ export function dmulscale14(a, b, c, d) {
 }
 
 /** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale24(a, b, c, d) {
+  return dmulscale(a, b, c, d, 24);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
 export function dmulscale32(a, b, c, d) {
   return dmulscale(a, b, c, d, 32);
+}
+
+/**
+ * ENGINE.C reciptable — used by krecipasm.
+ * reciptable[i] = divscale30(2048, i+2048)
+ * @type {Int32Array}
+ */
+const reciptable = (() => {
+  const t = new Int32Array(2048);
+  for (let i = 0; i < 2048; i++) {
+    t[i] = Number((BigInt(2048) << 30n) / BigInt(i + 2048)) | 0;
+  }
+  return t;
+})();
+
+const _krecipBits = new DataView(new ArrayBuffer(4));
+
+/**
+ * Ken's krecipasm — ENGINE.C FPU recip + reciptable (not 2^32/n).
+ * Portable form from JFBuild: float bits → table → sar by exponent.
+ * @param {number} n
+ * @returns {number}
+ */
+export function krecipasm(n) {
+  const v = n | 0;
+  if (v === 0) return 0x7fffffff;
+  _krecipBits.setFloat32(0, v, true);
+  const bits = _krecipBits.getInt32(0, true);
+  const shift = (((bits - 0x3f800000) | 0) >> 23) & 31;
+  return (reciptable[(bits >> 12) & 2047] >> shift) ^ (bits >> 31);
+}
+
+/** @param {number} a */
+export function klabs(a) {
+  const v = a | 0;
+  return v < 0 ? (-v) | 0 : v;
 }
 
 /**

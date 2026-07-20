@@ -9,6 +9,7 @@ import {
   mulscale5,
   mulscale11,
   mulscale16,
+  mulscale18,
   mulscale19,
   mulscale20,
   mulscale21,
@@ -801,6 +802,8 @@ export class DrawRooms {
 
   /**
    * ENGINE.C wallmost — flat → owallmost; sloped → Z at wall ends + same frustum clip.
+   * (Full vanilla view-ray slope Z is incomplete here — do not half-port without
+   * verifying globals: cos/sin viewingrange, krecipasm table, owallmost path.)
    * @param {Int16Array} mostbuf
    * @param {number} scan
    * @param {number} sectnum
@@ -1129,7 +1132,7 @@ export class DrawRooms {
       const ysiz = Math.max(1, this.art.tilesizy[tilenum] | 0);
       const walxrepeat = (wal.xrepeat || 8) << 3;
       const yrepeat = wal.yrepeat || 8;
-      this.prepwallScan(scan, walxrepeat);
+      this.prepwallScan(scan, walxrepeat, wal.cstat);
 
       const shade = Math.min(
         this.renderer.palookup.numShades - 1,
@@ -1171,7 +1174,6 @@ export class DrawRooms {
             const u1y = Math.min(this.dmost[x], this.dwall[x]);
             if (u1y > u0) {
               let texU = this.lwall[x];
-              if (wal.cstat & 8) texU = walxrepeat - 1 - texU;
               texU += wal.xpanning || 0;
               this.drawWallCol(
                 x,
@@ -1251,7 +1253,6 @@ export class DrawRooms {
             const l1 = Math.min(this.dmost[x], this.dplc[x]);
             if (l1 > l0) {
               let texU = this.lwall[x];
-              if (wal.cstat & 8) texU = walxrepeat - 1 - texU;
               texU += wal.xpanning || 0;
               this.drawWallCol(
                 x,
@@ -1319,7 +1320,7 @@ export class DrawRooms {
       const ysiz = Math.max(1, this.art.tilesizy[tilenum] | 0);
       const walxrepeat = (wal.xrepeat || 8) << 3;
       const yrepeat = wal.yrepeat || 8;
-      this.prepwallScan(scan, walxrepeat);
+      this.prepwallScan(scan, walxrepeat, wal.cstat);
       const shade = Math.min(
         this.renderer.palookup.numShades - 1,
         Math.max(0, wal.shade | 0),
@@ -1339,7 +1340,6 @@ export class DrawRooms {
         const w1 = Math.min(this.dmost[x], this.dplc[x]);
         if (w1 > w0) {
           let texU = this.lwall[x];
-          if (wal.cstat & 8) texU = walxrepeat - 1 - texU;
           texU += wal.xpanning || 0;
           this.drawWallCol(
             x,
@@ -1363,15 +1363,20 @@ export class DrawRooms {
   }
 
   /**
+   * ENGINE.C prepwall — 4-wide lwall/swall (do not step top/bot per pixel).
+   * Per-pixel top/bot stepping warps U/V badly when close at FOV edges.
    * @param {number} scan
    * @param {number} walxrepeat
+   * @param {number} [cstat]
    */
-  prepwallScan(scan, walxrepeat) {
+  prepwallScan(scan, walxrepeat, cstat = 0) {
     const { buffer } = this.renderer;
     const half = buffer.halfxdimen;
     const xdimen = buffer.xdimen;
     const xb1 = this.xb1[scan];
     const xb2 = this.xb2[scan];
+    if (xb2 < xb1) return;
+
     const rx1 = this.rx1[scan];
     const ry1 = this.ry1[scan];
     const rx2 = this.rx2[scan];
@@ -1384,23 +1389,73 @@ export class DrawRooms {
     let bot = mulscale11(rx1 - rx2, xdimen) + mulscale2(botinc, i);
     const splc = mulscale19(ry1, this.xdimscale);
     const sinc = mulscale16(ry2 - ry1, this.xdimscale);
-    const topStep = topinc >> 2;
-    const botStep = botinc >> 2;
 
-    for (let x = xb1; x <= xb2; x++) {
+    let x = xb1;
+    let l = 0;
+    let ol = 0;
+
+    // ENGINE.C: after swall, `l *= walxrepeat` — mid-column interp uses scaled l/ol.
+    if (bot !== 0) {
+      l = divscale12(top, bot);
+      this.swall[x] = (mulscale21(l, sinc) + splc) | 0;
+      l = Math.imul(l, walxrepeat);
+      this.lwall[x] = (l >> 18) | 0;
+    }
+
+    while (x + 4 <= xb2) {
+      top += topinc;
+      bot += botinc;
       if (bot !== 0) {
-        const l = divscale12(top, bot);
-        this.swall[x] = (mulscale21(l, sinc) + splc) | 0;
-        let lw = Math.imul(l, walxrepeat) >> 18;
-        if (lw < 0) lw = 0;
-        if (walxrepeat > 0 && lw >= walxrepeat) lw = walxrepeat - 1;
-        this.lwall[x] = lw;
-      } else {
-        this.swall[x] = splc;
-        this.lwall[x] = 0;
+        ol = l;
+        l = divscale12(top, bot);
+        this.swall[x + 4] = (mulscale21(l, sinc) + splc) | 0;
+        l = Math.imul(l, walxrepeat);
+        this.lwall[x + 4] = (l >> 18) | 0;
       }
-      top += topStep;
-      bot += botStep;
+      i = (ol + l) >> 1;
+      this.lwall[x + 2] = (i >> 18) | 0;
+      this.lwall[x + 1] = ((ol + i) >> 19) | 0;
+      this.lwall[x + 3] = ((l + i) >> 19) | 0;
+      this.swall[x + 2] = (this.swall[x] + this.swall[x + 4]) >> 1;
+      this.swall[x + 1] = (this.swall[x] + this.swall[x + 2]) >> 1;
+      this.swall[x + 3] = (this.swall[x + 4] + this.swall[x + 2]) >> 1;
+      x += 4;
+    }
+
+    if (x + 2 <= xb2) {
+      top += topinc >> 1;
+      bot += botinc >> 1;
+      if (bot !== 0) {
+        ol = l;
+        l = divscale12(top, bot);
+        this.swall[x + 2] = (mulscale21(l, sinc) + splc) | 0;
+        l = Math.imul(l, walxrepeat);
+        this.lwall[x + 2] = (l >> 18) | 0;
+      }
+      this.lwall[x + 1] = ((l + ol) >> 19) | 0;
+      this.swall[x + 1] = (this.swall[x] + this.swall[x + 2]) >> 1;
+      x += 2;
+    }
+
+    if (x + 1 <= xb2) {
+      bot += botinc >> 2;
+      if (bot !== 0) {
+        // Fresh unscaled l — mulscale18, not l*=walxrepeat then >>18
+        l = divscale12(top + (topinc >> 2), bot);
+        this.swall[x + 1] = (mulscale21(l, sinc) + splc) | 0;
+        this.lwall[x + 1] = mulscale18(l, walxrepeat);
+      }
+    }
+
+    if (this.lwall[xb1] < 0) this.lwall[xb1] = 0;
+    if (walxrepeat > 0 && this.lwall[xb2] >= walxrepeat) {
+      this.lwall[xb2] = walxrepeat - 1;
+    }
+    if (cstat & 8) {
+      walxrepeat--;
+      for (let xx = xb1; xx <= xb2; xx++) {
+        this.lwall[xx] = walxrepeat - this.lwall[xx];
+      }
     }
   }
 

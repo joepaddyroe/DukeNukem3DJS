@@ -19,6 +19,18 @@ Canonical instructions for building and maintaining this port. **Read this file 
 
 **Do not** port Doom algorithms (BSP, `R_DrawColumn`, WAD lumps, 35 Hz Doom tics, etc.) into this codebase. When DoomJS and Duke/Build disagree, **Duke/Build wins**. The temporary `DemoRoomRenderer` (ray-box) is scaffolding to exercise `vline` / `setview` — it is **not** the architecture for 3D; replace it with Build `drawrooms` / `drawmasks` from `ENGINE.C`.
 
+### Always check with vanilla (mandatory)
+
+Before changing render / clip / sector math:
+
+1. **Open the matching C function first** in `../duke_nukem_3d-master/BuildEngine/src/` or `../duke_nukem_3d-master/source/` (usually `ENGINE.C`).
+2. **Diff call order, globals, and edge cases** — not just the “idea” of the algorithm. Half-ports of Build math (wrong globals, missing tables like `reciptable`/`krecipasm`, wrong clip paths) often look plausible and then break the view.
+3. **Prefer a smaller, verified subset** over a speculative “more vanilla” rewrite. If the full C path cannot be matched yet, leave the known-good approx and document the gap in **§12**.
+4. **Do not invent fixes** (recompute endpoints, flip signs, change near-clip) without citing the C lines you are matching.
+5. After a fidelity change, bump `BUILD_TAG` and ask for a hard-refresh smoke test on E1L1 before stacking more changes.
+
+If vanilla and the port disagree, **vanilla wins** — fix the port, do not “improve” on Build.
+
 ---
 
 ## Quick start for agents (context recovery)
@@ -26,10 +38,11 @@ Canonical instructions for building and maintaining this port. **Read this file 
 If you are picking up this project with no chat history:
 
 1. Read **§12 Port status** — what works vs what vanilla still has.
-2. Read **§13 Priority roadmap** — suggested order of work.
-3. Use **§14 Key file map** to jump to the right module.
-4. Respect **§2–3** (SOLID + layers) before editing.
-5. After completing work, update **§12**, **§7**, and **§15 Changelog**.
+2. Read **Always check with vanilla** (under Source of truth) — open C before changing render/clip math.
+3. Read **§13 Priority roadmap** — suggested order of work.
+4. Use **§14 Key file map** to jump to the right module.
+5. Respect **§2–3** (SOLID + layers) before editing.
+6. After completing work, update **§12**, **§7**, and **§15 Changelog**.
 
 **Current maturity (2026-07-20):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`** (`scansector` / `drawalls` front-to-back). Face/wall **`drawmasks`**. **`clipmove`** wall collision. 4:3 presentation.
 
@@ -183,14 +196,16 @@ Phase 0 only creates the shell folders and platform/app/core stubs.
 ## 6. Porting workflow
 
 1. Locate the function in **Duke** `source/` or **Build** `BuildEngine/src/` (not in DoomJS)
-2. Identify data ownership (globals → instance fields)
-3. Design JS class/interface that preserves Build/Duke call shapes where practical (`setview`, `drawrooms`, `clipmove`, …)
-4. Port one vertical slice
-5. Verify against vanilla behaviour on a known map (e.g. `E1L1.MAP` from a legal GRP)
-6. Update **§7** checklist and **§12** port status in this file
+2. **Read the full vanilla path** (callers, globals, tables) before writing JS — see **Always check with vanilla**
+3. Identify data ownership (globals → instance fields)
+4. Design JS class/interface that preserves Build/Duke call shapes where practical (`setview`, `drawrooms`, `clipmove`, …)
+5. Port one vertical slice — line-faithful where math must match; leave documented approx only when blocked
+6. Verify against vanilla behaviour on a known map (e.g. `E1L1.MAP` from a legal GRP)
+7. Update **§7** checklist and **§12** port status in this file
 
 Do **not** bulk-translate entire `.c` files. One subsystem per change.  
-Do **not** copy DoomJS modules and “adapt” them — re-derive from the Duke/Build source.
+Do **not** copy DoomJS modules and “adapt” them — re-derive from the Duke/Build source.  
+Do **not** ship a “vanilla-inspired” rewrite without the C open beside it.
 
 ---
 
@@ -327,19 +342,20 @@ Goal: **visible Build map render** before deep Duke gameplay.
 
 When working on DukeNukem3DJs:
 
-1. Read this file — especially **Source of truth**, **§12**, and **§13**
+1. Read this file — especially **Source of truth**, **Always check with vanilla**, **§12**, and **§13**
 2. Implement from **Duke `source/`** and **Build `BuildEngine/src/`** — not from DoomJS code
-3. Respect SOLID and the layer model (process borrowed from DoomJS; behaviour from Duke/Build)
-4. Keep `index.html` thin; logic in `src/`
-5. Minimize scope — one subsystem per task
-6. Prefer Build/Duke names and call shapes (`setview`, `drawrooms`, `drawmasks`, `clipmove`, `loadboard`, …)
-7. Do **not** modify `duke_nukem_3d-master/`
-8. Do **not** add npm/webpack unless the user requests it
-9. Update **§7**, **§12**, and **§15** when completing port milestones
+3. **Before every fidelity / render / clip change:** open the matching C function and match it; do not invent math
+4. Respect SOLID and the layer model (process borrowed from DoomJS; behaviour from Duke/Build)
+5. Keep `index.html` thin; logic in `src/`
+6. Minimize scope — one subsystem per task
+7. Prefer Build/Duke names and call shapes (`setview`, `drawrooms`, `drawmasks`, `clipmove`, `loadboard`, …)
+8. Do **not** modify `duke_nukem_3d-master/`
+9. Do **not** add npm/webpack unless the user requests it
+10. Update **§7**, **§12**, and **§15** when completing port milestones
 
 When unsure where code belongs: *Which Build/Duke module owns this data, and which interface should the rest of the engine use?*
 
-When unsure how something should work: open the C file in `BuildEngine/src/` or `source/` first.
+When unsure how something should work: open the C file in `BuildEngine/src/` or `source/` first. If you cannot match vanilla yet, leave the prior known-good behaviour and document the gap.
 
 ---
 
@@ -391,6 +407,9 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | Portal column masks (no bbox gap paint); gotsector sibling pre-claim; drop near-plane vertex pull (Build rejects yb<256) |
 | 2026-07-20 | **Next phase:** replace DFS portals with Build bunch `scansector`/`drawalls` front-to-back (`DrawRooms.js` rewrite) |
 | 2026-07-20 | Fidelity audit: EYEHEIGHT 40<<8 spawn, walldist 164, setaspect/viewingrange, neighbor updatesector; not CRT scale |
+| 2026-07-20 | **Always check with vanilla** rule added to PROJECT.md; revert broken wallmost view-ray half-port |
+| 2026-07-20 | Wall sprites: perspective `lwall` U (ENGINE.C 3339) — fixes FOV-edge horizontal squash |
+| 2026-07-20 | Fix `krecipasm` to ENGINE.C reciptable/float path (was 2^32/n → wrong wall-sprite U scale) |
 
 ---
 

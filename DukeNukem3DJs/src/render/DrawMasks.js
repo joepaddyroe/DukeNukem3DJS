@@ -2,10 +2,16 @@ import {
   dmulscale6,
   dmulscale32,
   divscale,
+  krecipasm,
+  mulscale2,
   mulscale8,
+  mulscale9,
+  mulscale10,
+  mulscale11,
   mulscale14,
   mulscale15,
   mulscale16,
+  mulscale20,
   mulscale24,
   mulscale30,
   mulscale31,
@@ -314,10 +320,11 @@ export class DrawMasks {
     if (spr.cstat & 8) yoff = -yoff;
 
     const i = (xspan >> 1) + xoff;
-    const wx1 = (spr.x - (xv * i) / 65536) | 0;
-    const wy1 = (spr.y - (yv * i) / 65536) | 0;
-    const wx2 = (wx1 + (xv * xspan) / 65536) | 0;
-    const wy2 = (wy1 + (yv * xspan) / 65536) | 0;
+    // ENGINE.C: mulscale16(xv,i) — keep int32, not JS float /65536
+    const wx1 = (spr.x - mulscale16(xv, i)) | 0;
+    const wy1 = (spr.y - mulscale16(yv, i)) | 0;
+    const wx2 = (wx1 + mulscale16(xv, xspan)) | 0;
+    const wy2 = (wy1 + mulscale16(yv, xspan)) | 0;
 
     const a = rooms.transform(wx1, wy1);
     const b = rooms.transform(wx2, wy2);
@@ -389,9 +396,42 @@ export class DrawMasks {
     // Face-style smost (wall-sprite C path is heavier; same front tests)
     if (!this.applySmost(rooms, spr, sprYp, lx, rx, uwall, dwall)) return;
 
+    // ENGINE.C drawsprite wall-sprite U (3339–3366)
+    const lwall = new Int32Array(xdimen + 4);
+    let topinc = -mulscale10(yp1, xspan);
+    const topDiff =
+      (mulscale10(xp1, xdimen) - mulscale9(xb1 - half, yp1)) | 0;
+    let top = (Math.imul(topDiff, xspan) >> 3) | 0;
+    let botinc = (yp2 - yp1) >> 8;
+    let bot =
+      (mulscale11(xp1 - xp2, xdimen) + mulscale2(xb1 - half, botinc)) | 0;
+    const jEnd = xb2 + 3;
+    let z = mulscale20(top, krecipasm(bot));
+    lwall[xb1] = z >> 8;
+    for (let x = xb1 + 4; x <= jEnd; x += 4) {
+      top = (top + topinc) | 0;
+      bot = (bot + botinc) | 0;
+      const zz = z;
+      z = mulscale20(top, krecipasm(bot));
+      lwall[x] = z >> 8;
+      const iMid = (z + zz) >> 1;
+      lwall[x - 2] = iMid >> 8;
+      lwall[x - 3] = (iMid + zz) >> 9;
+      lwall[x - 1] = (iMid + z) >> 9;
+    }
+    if (lwall[xb1] < 0) lwall[xb1] = 0;
+    if (lwall[xb2] >= xspan) lwall[xb2] = xspan - 1;
+    if (swapped !== ((spr.cstat & 4) !== 0)) {
+      const last = xspan - 1;
+      for (let x = xb1; x <= xb2; x++) {
+        lwall[x] = last - lwall[x];
+      }
+    }
+
     let z2 = spr.z - ((yoff * spr.yrepeat) << 2);
     if (spr.cstat & 128) {
       z2 += (yspan * spr.yrepeat) << 1;
+      if (yspan & 1) z2 += spr.yrepeat << 1;
     }
     const z1s = z2 - ((yspan * spr.yrepeat) << 2);
 
@@ -401,9 +441,9 @@ export class DrawMasks {
     const yBot1 = rooms.zToScreen(z2 - rooms.posz, yb1);
     const yBot2 = rooms.zToScreen(z2 - rooms.posz, yb2);
     const topInc = fullDx > 0 ? ((yTop2 - yTop1) << 16) / fullDx : 0;
-    const botInc = fullDx > 0 ? ((yBot2 - yBot1) << 16) / fullDx : 0;
+    const botIncY = fullDx > 0 ? ((yBot2 - yBot1) << 16) / fullDx : 0;
     let topF = (yTop1 << 16) + topInc * (lx - xb1);
-    let botF = (yBot1 << 16) + botInc * (lx - xb1);
+    let botF = (yBot1 << 16) + botIncY * (lx - xb1);
 
     const shade = Math.min(
       this.renderer.palookup.numShades - 1,
@@ -412,16 +452,13 @@ export class DrawMasks {
     const shadeOff = this.renderer.palookup.shadeOffset(shade);
     const tables = this.renderer.palookup.tables;
     const { pixels, ylookup, windowx1, windowy1 } = buffer;
-    const mirrorX = swapped !== ((spr.cstat & 4) !== 0);
     const mirrorY = (spr.cstat & 8) !== 0;
 
     for (let x = lx; x <= rx; x++) {
       const u0 = Math.max(uwall[x], topF >> 16);
       const u1 = Math.min(dwall[x], (botF >> 16) + 1);
       if (u1 > u0) {
-        const t = fullDx > 0 ? (x - xb1) / fullDx : 0;
-        let texX = (t * xspan) | 0;
-        if (mirrorX) texX = xspan - 1 - texX;
+        let texX = lwall[x] | 0;
         if (texX < 0) texX = 0;
         if (texX >= xspan) texX = xspan - 1;
         const col = this.art.getColumn(tilenum, texX);
@@ -443,7 +480,7 @@ export class DrawMasks {
         }
       }
       topF += topInc;
-      botF += botInc;
+      botF += botIncY;
     }
   }
 
