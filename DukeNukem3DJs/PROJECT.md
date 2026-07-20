@@ -54,7 +54,7 @@ If you are picking up this project with no chat history:
 | **P1** | GRP / ART / palette | Done |
 | **P1** | `loadboard` (E1L1) | Done |
 | **P2** | `drawrooms` walls + portals | Partial — bunch/`scansector`/`drawalls` port; wallmost approx |
-| **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align; slope approx) |
+| **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align + grouscan slopes) |
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor sprites + maskwalls; floor = affine subset |
 | **P2** | Player movement + `clipmove` | Partial — wall clipmove/raytrace slide, pushmove, getzrange; no sprite clips |
@@ -160,8 +160,12 @@ DukeNukem3DJs/
 │   │   ├── ViewBuffer.js       # frameplace / ylookup / setview
 │   │   ├── VlineDrawer.js      # vlineasm1
 │   │   ├── HlineDrawer.js      # solid spans
-│   │   ├── FlatPlane.js        # flat ceilscan/florscan UV
+│   │   ├── FlatPlane.js        # flat ceilscan/florscan UV (legacy/fallback)
+│   │   ├── FlatScan.js         # flat horizlookup floors
+│   │   ├── Grouscan.js         # ENGINE.C grouscan slopes
 │   │   ├── DrawRooms.js        # portal drawrooms subset
+│   │   ├── DrawMasks.js        # drawmasks sprites / maskwalls
+│   │   ├── ParallaxSky.js      # parascan sky
 │   │   ├── Palookup.js         # shade tables
 │   │   └── DemoRoomRenderer.js # TEMP scaffolding only — not Build drawrooms
 │   ├── audio/                  # SFX / music (later)
@@ -237,10 +241,11 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started
 - [x] `ViewBuffer` / `VlineDrawer` / `HlineDrawer` / `Palookup`
 - [x] Real palette + ART columns
 - [x] `DrawRooms` portal subset — solid + step walls, umost/dmost (E1L1)
-- [x] Flat `ceilscan`/`florscan` UV subset (`FlatPlane.js`) — skip slope/parallax
+- [x] Flat `ceilscan`/`florscan` UV subset (`FlatPlane.js` / `FlatScan.js`)
 - [x] 4:3 CRT-aspect present (`CanvasVideoOutput`)
 - [ ] Full bunch/`scansector` parity with `ENGINE.C`
-- [ ] Parallax skies (`parascan`) / slopes (`grouscan`)
+- [x] Sloped floors/ceilings (`Grouscan.js` · ENGINE.C `grouscan`)
+- [ ] Parallax skies (`parascan`) full parity / slope `slopalookup` fog
 - [ ] `drawmasks` sprites / masked walls
 
 ### Phase 4 — Play simulation
@@ -286,14 +291,14 @@ drawmasks sprites   ██████░░░░   ~60%   face/wall/floor + ma
 |------|-----------|-------|
 | GRP/ART/palette | `grp/*` | From `DUKE3D.GRP` |
 | Map load | `engine/BoardLoader.js`, `SectorQuery.js` | Map v7 `E1L1.MAP`, APLAYER spawn, `getzsofslope` |
-| drawrooms | `render/DrawRooms.js`, `FlatPlane.js`, `ParallaxSky.js` | Portals, floors, LA parascan sky |
+| drawrooms | `render/DrawRooms.js`, `FlatScan.js`, `Grouscan.js`, `ParallaxSky.js` | Portals, flats, grouscan slopes, LA parascan sky |
 | drawmasks | `render/DrawMasks.js` | Face + wall sprites |
 | clipmove | `engine/ClipMove.js` | Wall collect, raytrace slide, pushmove, getzrange |
 | Look around | `platform/input/Keyboard.js` | WASD + turn |
 
 ### 12.3 Missing / next
 
-Sprite clips in clipmove/getzrange, maskwalls, true `grouscan` slopes, Duke play loop.
+Sprite clips in clipmove/getzrange, full floor-sprite `ceilsprite`, slope distance fog (`slopalookup`), Duke play loop.
 
 ---
 
@@ -306,7 +311,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P0 | Canvas + vline primitives | Done | `ViewBuffer`, `VlineDrawer` |
 | P1 | GRP + ART + palette | Done | `grp/` · `CACHE1D.C`, `ENGINE.C` loadpics/loadpalette |
 | P1 | `loadboard` | Done | `engine/BoardLoader.js` · `ENGINE.C` |
-| P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `FlatPlane.js` · `ENGINE.C` |
+| P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `Grouscan.js`, `FlatScan.js` · `ENGINE.C` |
 | P2 | `clipmove` + player | Partial — walls + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
 | P2 | Sprites / masks | Partial (face) | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
 | P3 | Duke weapons / actors | Game feel | `ACTORS.C`, `PLAYER.C` |
@@ -325,7 +330,8 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | Timer / tic constants | `core/gameConstants.js` |
 | Frameplace / setview / clearview | `render/ViewBuffer.js` |
 | Draw a textured wall column | `render/VlineDrawer.js` |
-| Flat floor/ceiling UV | `render/FlatPlane.js` |
+| Flat floor/ceiling UV | `render/FlatScan.js`, `FlatPlane.js` |
+| Sloped floor/ceiling UV | `render/Grouscan.js` · `ENGINE.C` grouscan |
 | Portal drawrooms | `render/DrawRooms.js` |
 | Wall clipmove | `engine/ClipMove.js` |
 | Face sprites / drawmasks | `render/DrawMasks.js` |
@@ -414,6 +420,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | Parallax sky: parascan subset (`radarang2`, psky LA, parallaxyscale, wallscan V) |
 | 2026-07-20 | clipmove v2: raytrace slide, wall pushmove, getzrange; `movePlayer` order |
 | 2026-07-20 | Maskwalls + floor sprites (affine subset); mvline skip 255; drawmasks interleave |
+| 2026-07-20 | True `grouscan` slopes (`Grouscan.js` + JFBuild-style `slopevlin`); replace FlatPlane slope approx |
 
 ---
 

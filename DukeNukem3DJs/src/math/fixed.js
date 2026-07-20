@@ -30,6 +30,11 @@ export function mulscale2(a, b) {
 }
 
 /** @param {number} a @param {number} b */
+export function mulscale4(a, b) {
+  return mulscale(a, b, 4);
+}
+
+/** @param {number} a @param {number} b */
 export function mulscale5(a, b) {
   return mulscale(a, b, 5);
 }
@@ -57,6 +62,11 @@ export function mulscale10(a, b) {
 /** @param {number} a @param {number} b */
 export function mulscale12(a, b) {
   return mulscale(a, b, 12);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale13(a, b) {
+  return mulscale(a, b, 13);
 }
 
 /** @param {number} a @param {number} b */
@@ -97,6 +107,21 @@ export function mulscale21(a, b) {
 /** @param {number} a @param {number} b */
 export function mulscale24(a, b) {
   return mulscale(a, b, 24);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale25(a, b) {
+  return mulscale(a, b, 25);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale27(a, b) {
+  return mulscale(a, b, 27);
+}
+
+/** @param {number} a @param {number} b */
+export function mulscale28(a, b) {
+  return mulscale(a, b, 28);
 }
 
 /** @param {number} a @param {number} b */
@@ -142,6 +167,11 @@ export function dmulscale8(a, b, c, d) {
 }
 
 /** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale9(a, b, c, d) {
+  return dmulscale(a, b, c, d, 9);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
 export function dmulscale10(a, b, c, d) {
   return dmulscale(a, b, c, d, 10);
 }
@@ -157,8 +187,23 @@ export function dmulscale14(a, b, c, d) {
 }
 
 /** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale16(a, b, c, d) {
+  return dmulscale(a, b, c, d, 16);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale17(a, b, c, d) {
+  return dmulscale(a, b, c, d, 17);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
 export function dmulscale24(a, b, c, d) {
   return dmulscale(a, b, c, d, 24);
+}
+
+/** @param {number} a @param {number} b @param {number} c @param {number} d */
+export function dmulscale25(a, b, c, d) {
+  return dmulscale(a, b, c, d, 25);
 }
 
 /** @param {number} a @param {number} b @param {number} c @param {number} d */

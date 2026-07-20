@@ -8,7 +8,7 @@
  * - bit 8 → double scale (finer tiling)
  *
  * Parallax (stat&1) returns null (caller draws sky).
- * Slopes use closed-form ray∩plane (grouscan-ish), not flat-Z unproject.
+ * Slopes (stat&2) return null — caller uses Grouscan.js (ENGINE.C grouscan).
  */
 
 /**

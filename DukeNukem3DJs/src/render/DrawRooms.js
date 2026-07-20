@@ -18,6 +18,7 @@ import {
 } from '../math/fixed.js';
 import { setupFlatPlane, sampleFlatPlane } from './FlatPlane.js';
 import { HorizLookup, setupFlatScan, sampleFlatScan } from './FlatScan.js';
+import { grouscan } from './Grouscan.js';
 import { BUILD_ANGLE_MASK } from '../core/renderConstants.js';
 import { pickSpawn, inside, EYEHEIGHT, getzsofslope } from '../engine/SectorQuery.js';
 import { movePlayer, CLIPMASK0 } from '../engine/ClipMove.js';
@@ -105,6 +106,8 @@ export class DrawRooms {
     this._florScan = null;
     this._skyCeil = false;
     this._skyFlor = false;
+    this._ceilSlope = false;
+    this._florSlope = false;
     /** Last pic used for parallaxSky.setupBackdrop */
     this._skyBackdropPic = -1;
     this._horizLookup = new HorizLookup();
@@ -717,53 +720,64 @@ export class DrawRooms {
     const sectnum = this.thesector[z];
     const sec = board.sectors[sectnum];
 
-    this._ceilScan = setupFlatScan({
-      sec,
-      board,
-      art: this.art,
-      isCeil: true,
-      posx: this.posx,
-      posy: this.posy,
-      posz: this.posz,
-      cos: this.cos,
-      sin: this.sin,
-      viewingrangerecip: buffer.viewingrangerecip ?? 65536,
-      halfxdimen: buffer.halfxdimen,
-    });
-    this._florScan = setupFlatScan({
-      sec,
-      board,
-      art: this.art,
-      isCeil: false,
-      posx: this.posx,
-      posy: this.posy,
-      posz: this.posz,
-      cos: this.cos,
-      sin: this.sin,
-      viewingrangerecip: buffer.viewingrangerecip ?? 65536,
-      halfxdimen: buffer.halfxdimen,
-    });
-    // Slopes still use FlatPlane (grouscan later)
-    this._ceilPlane = this._ceilScan
-      ? null
-      : setupFlatPlane({
-          sec,
-          isCeil: true,
-          posz: this.posz,
-          art: this.art,
-          board,
-        });
-    this._florPlane = this._florScan
-      ? null
-      : setupFlatPlane({
-          sec,
-          isCeil: false,
-          posz: this.posz,
-          art: this.art,
-          board,
-        });
     this._skyCeil = (sec.ceilingstat & 1) !== 0;
     this._skyFlor = (sec.floorstat & 1) !== 0;
+    // ENGINE.C: slopes → grouscan; flats → ceilscan/florscan
+    this._ceilSlope = !this._skyCeil && (sec.ceilingstat & 2) !== 0;
+    this._florSlope = !this._skyFlor && (sec.floorstat & 2) !== 0;
+
+    this._ceilScan =
+      this._skyCeil || this._ceilSlope
+        ? null
+        : setupFlatScan({
+            sec,
+            board,
+            art: this.art,
+            isCeil: true,
+            posx: this.posx,
+            posy: this.posy,
+            posz: this.posz,
+            cos: this.cos,
+            sin: this.sin,
+            viewingrangerecip: buffer.viewingrangerecip ?? 65536,
+            halfxdimen: buffer.halfxdimen,
+          });
+    this._florScan =
+      this._skyFlor || this._florSlope
+        ? null
+        : setupFlatScan({
+            sec,
+            board,
+            art: this.art,
+            isCeil: false,
+            posx: this.posx,
+            posy: this.posy,
+            posz: this.posz,
+            cos: this.cos,
+            sin: this.sin,
+            viewingrangerecip: buffer.viewingrangerecip ?? 65536,
+            halfxdimen: buffer.halfxdimen,
+          });
+    this._ceilPlane =
+      this._ceilScan || this._ceilSlope
+        ? null
+        : setupFlatPlane({
+            sec,
+            isCeil: true,
+            posz: this.posz,
+            art: this.art,
+            board,
+          });
+    this._florPlane =
+      this._florScan || this._florSlope
+        ? null
+        : setupFlatPlane({
+            sec,
+            isCeil: false,
+            posz: this.posz,
+            art: this.art,
+            board,
+          });
 
     // uplc/dplc for every pixel covered by a wall in this bunch
     const xdimen = this.renderer.buffer.xdimen;
@@ -1018,11 +1032,83 @@ export class DrawRooms {
     if (this.debugVisMode === 'wallsOnly') return;
 
     const sec = this.board.sectors[sectnum];
+    const { buffer } = this.renderer;
+    const xdimenrecip = divscale32(1, Math.max(1, buffer.xdimen));
+
+    if (drawCeil && this._ceilSlope) {
+      const shade = Math.min(
+        this.renderer.palookup.numShades - 1,
+        Math.max(0, sec.ceilingshade | 0),
+      );
+      grouscan({
+        dax1: x1,
+        dax2: x2,
+        sectnum,
+        dastat: 0,
+        board: this.board,
+        art: this.art,
+        posx: this.posx,
+        posy: this.posy,
+        posz: this.posz,
+        cos: this.cos,
+        sin: this.sin,
+        globalhoriz: this.globalhoriz,
+        xdimenrecip,
+        viewingrangerecip: buffer.viewingrangerecip ?? 65536,
+        xdimscale: this.xdimscale,
+        halfxdimen: buffer.halfxdimen,
+        umost: this.umost,
+        dmost: this.dmost,
+        uplc: this.uplc,
+        dplc: this.dplc,
+        pixels: buffer.pixels,
+        ylookup: buffer.ylookup,
+        windowx1: buffer.windowx1,
+        windowy1: buffer.windowy1,
+        tables: this.renderer.palookup.tables,
+        shadeOffset: this.renderer.palookup.shadeOffset(shade),
+      });
+    }
+
+    if (drawFlor && this._florSlope) {
+      const shade = Math.min(
+        this.renderer.palookup.numShades - 1,
+        Math.max(0, sec.floorshade | 0),
+      );
+      grouscan({
+        dax1: x1,
+        dax2: x2,
+        sectnum,
+        dastat: 1,
+        board: this.board,
+        art: this.art,
+        posx: this.posx,
+        posy: this.posy,
+        posz: this.posz,
+        cos: this.cos,
+        sin: this.sin,
+        globalhoriz: this.globalhoriz,
+        xdimenrecip,
+        viewingrangerecip: buffer.viewingrangerecip ?? 65536,
+        xdimscale: this.xdimscale,
+        halfxdimen: buffer.halfxdimen,
+        umost: this.umost,
+        dmost: this.dmost,
+        uplc: this.uplc,
+        dplc: this.dplc,
+        pixels: buffer.pixels,
+        ylookup: buffer.ylookup,
+        windowx1: buffer.windowx1,
+        windowy1: buffer.windowy1,
+        tables: this.renderer.palookup.tables,
+        shadeOffset: this.renderer.palookup.shadeOffset(shade),
+      });
+    }
 
     for (let x = x1; x <= x2; x++) {
       if (this.umost[x] >= this.dmost[x]) continue;
 
-      if (drawCeil) {
+      if (drawCeil && !this._ceilSlope) {
         if (this._skyCeil) {
           // ENGINE.C parascan ceiling: topptr=umost, botptr=uplc (not dmost!)
           const skyBot = Math.min(this.dmost[x], Math.max(this.umost[x], this.uplc[x]));
@@ -1044,7 +1130,7 @@ export class DrawRooms {
         }
       }
 
-      if (!drawFlor) continue;
+      if (!drawFlor || this._florSlope) continue;
 
       const fTop = Math.max(this.umost[x], Math.min(this.dmost[x], this.dplc[x]));
       const fBot = this.dmost[x];
