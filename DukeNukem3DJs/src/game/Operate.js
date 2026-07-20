@@ -5,7 +5,12 @@ import { neartag } from '../engine/NearTag.js';
 import { nextsectorneighborz } from '../engine/NextSector.js';
 import { setAnimation, setWallAnimation, getAnimationGoal } from './Animate.js';
 import { checkHitSwitch, ACTIVATOR, MASTERSWITCH } from './Switches.js';
-import { operateSwingDoor, swingDoorBusy } from './SwingDoors.js';
+import {
+  operateSwingDoor,
+  operateSubwayDoor,
+  operateBridge,
+  swingDoorBusy,
+} from './Effectors.js';
 import { BIT_OPEN } from './GetInput.js';
 
 /**
@@ -170,6 +175,12 @@ export function operateSectors(board, sn) {
       return;
     case 23:
       operateSwingDoor(board, sn);
+      return;
+    case 25:
+      operateSubwayDoor(board, sn);
+      return;
+    case 27:
+      operateBridge(board, sn);
       return;
     case 20: {
       let j;
