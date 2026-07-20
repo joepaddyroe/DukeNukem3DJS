@@ -186,6 +186,7 @@ export class DrawRooms {
 
     const moved = movePlayer({
       board: this.board,
+      art: this.art,
       x: this.posx,
       y: this.posy,
       z: this.posz,

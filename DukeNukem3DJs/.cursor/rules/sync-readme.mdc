@@ -1,0 +1,18 @@
+---
+description: Keep README.md mirrors identical to PROJECT.md after every PROJECT.md edit
+globs: PROJECT.md,README.md,**/PROJECT.md,**/README.md
+alwaysApply: true
+---
+
+# Sync README from PROJECT.md
+
+`DukeNukem3DJs/PROJECT.md` is the source of truth for product / port docs.
+
+Whenever you create, edit, or update `PROJECT.md`:
+
+1. Copy its **full** contents into `DukeNukem3DJs/README.md`
+2. Copy the same contents into the repo-root `README.md` (`../README.md` from DukeNukem3DJs)
+3. On each README only, keep/restore a short top banner that says it is a mirror of `PROJECT.md` and must be updated in the same change
+4. Do this in the **same** turn / change set — never leave PROJECT.md and README out of sync
+
+Do not maintain separate README content. Do not summarize PROJECT.md into a shorter README unless the user explicitly asks for a different README style.

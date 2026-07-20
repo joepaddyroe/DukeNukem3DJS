@@ -2,6 +2,15 @@
 
 Canonical instructions for building and maintaining this port. **Read this file before making structural changes.** Update it when architecture, conventions, or port status change.
 
+### README sync (mandatory)
+
+`PROJECT.md` is the **source of truth**. After any edit to this file, **immediately** copy the full contents into:
+
+1. `README.md` (this folder)
+2. `../README.md` (repo root)
+
+Keep both READMEs identical to this file except for a short sync-notice banner at the top of each README. Do this in the **same** change set — never leave PROJECT.md and README out of sync.
+
 **Reference sources (read-only — never edit):**
 
 | Tree | Role |
@@ -42,9 +51,9 @@ If you are picking up this project with no chat history:
 3. Read **§13 Priority roadmap** — suggested order of work.
 4. Use **§14 Key file map** to jump to the right module.
 5. Respect **§2–3** (SOLID + layers) before editing.
-6. After completing work, update **§12**, **§7**, and **§15 Changelog**.
+6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-20):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`** (`scansector` / `drawalls` front-to-back). Face/wall **`drawmasks`**. **`clipmove`** wall collision. 4:3 presentation.
+**Current maturity (2026-07-20):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`** walls + blocking sprites. 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -57,7 +66,7 @@ If you are picking up this project with no chat history:
 | **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align + grouscan slopes) |
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor sprites + maskwalls; floor = affine subset |
-| **P2** | Player movement + `clipmove` | Partial — wall clipmove/raytrace slide, pushmove, getzrange; no sprite clips |
+| **P2** | Player movement + `clipmove` | Partial — walls + sprite clips (face/wall/floor) + getzrange/pushmove |
 
 ---
 
@@ -281,7 +290,7 @@ Shell / canvas      ██████████  100%
 GRP / ART / palette █████████░   ~90%
 Board load          ████████░░   ~85%   E1L1 + updatesector/inside
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
-Player / clipmove   ███████░░░   ~70%   wall clipmove+pushmove+getzrange; no sprite clips
+Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
 drawmasks sprites   ██████░░░░   ~60%   face/wall/floor + maskwalls; floor affine subset
 ```
 
@@ -293,12 +302,12 @@ drawmasks sprites   ██████░░░░   ~60%   face/wall/floor + ma
 | Map load | `engine/BoardLoader.js`, `SectorQuery.js` | Map v7 `E1L1.MAP`, APLAYER spawn, `getzsofslope` |
 | drawrooms | `render/DrawRooms.js`, `FlatScan.js`, `Grouscan.js`, `ParallaxSky.js` | Portals, flats, grouscan slopes, LA parascan sky |
 | drawmasks | `render/DrawMasks.js` | Face + wall sprites |
-| clipmove | `engine/ClipMove.js` | Wall collect, raytrace slide, pushmove, getzrange |
+| clipmove | `engine/ClipMove.js` | Wall + sprite clips, raytrace slide, pushmove, getzrange |
 | Look around | `platform/input/Keyboard.js` | WASD + turn |
 
 ### 12.3 Missing / next
 
-Sprite clips in clipmove/getzrange, full floor-sprite `ceilsprite`, slope distance fog (`slopalookup`), Duke play loop.
+Full floor-sprite `ceilsprite`, slope distance fog (`slopalookup`), Duke play loop.
 
 ---
 
@@ -312,7 +321,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P1 | GRP + ART + palette | Done | `grp/` · `CACHE1D.C`, `ENGINE.C` loadpics/loadpalette |
 | P1 | `loadboard` | Done | `engine/BoardLoader.js` · `ENGINE.C` |
 | P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `Grouscan.js`, `FlatScan.js` · `ENGINE.C` |
-| P2 | `clipmove` + player | Partial — walls + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
+| P2 | `clipmove` + player | Partial — walls + sprites + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
 | P2 | Sprites / masks | Partial (face) | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
 | P3 | Duke weapons / actors | Game feel | `ACTORS.C`, `PLAYER.C` |
 
@@ -359,6 +368,7 @@ When working on DukeNukem3DJs:
 8. Do **not** modify `duke_nukem_3d-master/`
 9. Do **not** add npm/webpack unless the user requests it
 10. Update **§7**, **§12**, and **§15** when completing port milestones
+11. **Sync READMEs** whenever this file changes (`README.md` + `../README.md`)
 
 When unsure where code belongs: *Which Build/Duke module owns this data, and which interface should the rest of the engine use?*
 
@@ -421,6 +431,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | clipmove v2: raytrace slide, wall pushmove, getzrange; `movePlayer` order |
 | 2026-07-20 | Maskwalls + floor sprites (affine subset); mvline skip 255; drawmasks interleave |
 | 2026-07-20 | True `grouscan` slopes (`Grouscan.js` + JFBuild-style `slopevlin`); replace FlatPlane slope approx |
+| 2026-07-20 | Sprite clips in `clipmove`/`getzrange` (face/wall/floor; CLIPMASK0); pass ART for tilesiz/picanm |
 
 ---
 

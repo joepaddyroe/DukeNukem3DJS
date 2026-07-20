@@ -1,7 +1,7 @@
 # DukeNukem3DJs — Project Guide
 
-> **README sync:** Public mirror of [`DukeNukem3DJs/PROJECT.md`](./DukeNukem3DJs/PROJECT.md).  
-> **Agents:** whenever you change `DukeNukem3DJs/PROJECT.md`, update this file and `DukeNukem3DJs/README.md` to match (same change). Paths below are written for the `DukeNukem3DJs/` working directory.
+> **README sync:** This file is the public mirror of [`PROJECT.md`](./PROJECT.md).  
+> **Agents:** whenever you change `PROJECT.md`, copy the full contents into this `README.md` (and the repo-root `../README.md`) in the same change — keep them identical aside from this notice block.
 
 Canonical instructions for building and maintaining this port. **Read this file before making structural changes.** Update it when architecture, conventions, or port status change.
 

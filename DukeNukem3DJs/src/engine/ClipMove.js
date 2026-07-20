@@ -1,17 +1,18 @@
 /**
- * Build ENGINE.C clipmove / getzrange / pushmove — wall subset for player walk.
+ * Build ENGINE.C clipmove / getzrange / pushmove — walls + blocking sprites.
  * C refs: clipmove ~5030, raytrace ~5366, keepaway ~5349, getzrange ~6200,
- * pushmove ~5399, clipinsidebox ~2534.
+ * pushmove ~5399, clipinsidebox ~2534, clipinsideboxline ~2560.
  *
  * clipmove does NOT write z — callers use getzrange then snap eye height.
- * Sprite clips deferred (need ART + sprite lists); walls + sector Z first.
  */
 import {
   divscale16,
   divscale20,
   divscale30,
   dmulscale6,
+  dmulscale16,
   klabs,
+  mulscale14,
   mulscale16,
   mulscale20,
   mulscale30,
@@ -21,7 +22,7 @@ import {
 import { getzsofslope, inside, updatesector, EYEHEIGHT } from './SectorQuery.js';
 import { buildTables } from '../math/BuildTables.js';
 
-/** CLIPMASK0 — block walls with cstat bit 0. */
+/** CLIPMASK0 — wall cstat bit 0 + sprite cstat bit 0. */
 export const CLIPMASK0 = (1 << 16) + 1;
 
 const MAXCLIPDIST = 1024;
@@ -130,6 +131,49 @@ function clipinsidebox(board, x, y, wallnum, walldist) {
   if (y2 > 0) y2 = Math.imul(y2, 0 - x1);
   else y2 = Math.imul(y2, r - x1);
   return x2 >= y2 ? 2 : 0;
+}
+
+/**
+ * ENGINE.C clipinsideboxline.
+ * @returns {number} 0 / 1 / 2
+ */
+function clipinsideboxline(x, y, x1, y1, x2, y2, walldist) {
+  const r = walldist << 1;
+  let ax1 = (x1 + walldist - x) | 0;
+  let ax2 = (x2 + walldist - x) | 0;
+  if (ax1 < 0 && ax2 < 0) return 0;
+  if (ax1 >= r && ax2 >= r) return 0;
+  let ay1 = (y1 + walldist - y) | 0;
+  let ay2 = (y2 + walldist - y) | 0;
+  if (ay1 < 0 && ay2 < 0) return 0;
+  if (ay1 >= r && ay2 >= r) return 0;
+  ax2 = (ax2 - ax1) | 0;
+  ay2 = (ay2 - ay1) | 0;
+  if (Math.imul(ax2, (walldist - ay1) | 0) >= Math.imul(ay2, (walldist - ax1) | 0)) {
+    if (ax2 > 0) ax2 = Math.imul(ax2, (0 - ay1) | 0);
+    else ax2 = Math.imul(ax2, (r - ay1) | 0);
+    if (ay2 > 0) ay2 = Math.imul(ay2, (r - ax1) | 0);
+    else ay2 = Math.imul(ay2, (0 - ax1) | 0);
+    return ax2 < ay2 ? 1 : 0;
+  }
+  if (ax2 > 0) ax2 = Math.imul(ax2, (r - ay1) | 0);
+  else ax2 = Math.imul(ax2, (0 - ay1) | 0);
+  if (ay2 > 0) ay2 = Math.imul(ay2, (0 - ax1) | 0);
+  else ay2 = Math.imul(ay2, (r - ax1) | 0);
+  return ax2 >= ay2 ? 2 : 0;
+}
+
+/**
+ * Signed picanm x/y anim offsets (BUILD.H).
+ * @param {number} picanm
+ */
+function picanmXoff(picanm) {
+  return (picanm << 16) >> 24;
+}
+
+/** @param {number} picanm */
+function picanmYoff(picanm) {
+  return (picanm << 8) >> 24;
 }
 
 /**
@@ -252,8 +296,9 @@ function raytrace(clipit, x3, y3, goal) {
 }
 
 /**
- * Collect blocking wall clip lines (ENGINE.C clipmove wall loop).
+ * Collect blocking wall + sprite clip lines (ENGINE.C clipmove gather loop).
  * @param {import('./Board.js').Board} board
+ * @param {import('../grp/ArtTiles.js').ArtTiles|null|undefined} art
  * @param {number} x
  * @param {number} y
  * @param {number} z
@@ -264,11 +309,13 @@ function raytrace(clipit, x3, y3, goal) {
  * @param {number} ceildist
  * @param {number} flordist
  * @param {number} dawalclipmask
+ * @param {number} dasprclipmask
  * @param {ClipLine[]} clipit
  * @returns {number[]} clipsectorlist
  */
-function collectWallClips(
+function collectClipLines(
   board,
+  art,
   x,
   y,
   z,
@@ -279,6 +326,7 @@ function collectWallClips(
   ceildist,
   flordist,
   dawalclipmask,
+  dasprclipmask,
   clipit,
 ) {
   const cx = ((x + (x + gx)) >> 1) | 0;
@@ -293,6 +341,8 @@ function collectWallClips(
   const ymin = (cy - rad) | 0;
   const xmax = (cx + rad) | 0;
   const ymax = (cy + rad) | 0;
+
+  if (!buildTables.loaded) buildTables.generateFallback();
 
   /** @type {number[]} */
   const clipsectorlist = [sectnum];
@@ -378,6 +428,240 @@ function collectWallClips(
         addclipline(clipit, x1 + dax, y1 + day, x2 + dax, y2 + day, j + 32768);
       }
     }
+
+    if (!art || dasprclipmask === 0) continue;
+
+    const sprites = board.sprites;
+    for (let j = 0; j < sprites.length; j++) {
+      const spr = sprites[j];
+      if ((spr.sectnum | 0) !== dasect) continue;
+      const cstat = spr.cstat | 0;
+      if ((cstat & dasprclipmask) === 0) continue;
+
+      let sx = spr.x | 0;
+      let sy = spr.y | 0;
+      const tilenum = spr.picnum & 0xffff;
+      const tilesizx = art.tilesizx[tilenum] | 0;
+      const tilesizy = art.tilesizy[tilenum] | 0;
+      const picanm = art.picanm[tilenum] | 0;
+
+      switch (cstat & 48) {
+        case 0: {
+          if (sx < xmin || sx > xmax || sy < ymin || sy > ymax) break;
+          let k = ((tilesizy * (spr.yrepeat | 0)) << 2) | 0;
+          let daz = cstat & 128 ? (spr.z + (k >> 1)) | 0 : spr.z | 0;
+          if (picanm & 0x00ff0000) {
+            daz = (daz - ((picanmYoff(picanm) * (spr.yrepeat | 0)) << 2)) | 0;
+          }
+          if (z < daz + ceildist && z > daz - k - flordist) {
+            let bsz = ((spr.clipdist << 2) + walldist) | 0;
+            if (gx < 0) bsz = -bsz;
+            addclipline(clipit, sx - bsz, sy - bsz, sx - bsz, sy + bsz, j + 49152);
+            bsz = ((spr.clipdist << 2) + walldist) | 0;
+            if (gy < 0) bsz = -bsz;
+            addclipline(clipit, sx + bsz, sy - bsz, sx - bsz, sy - bsz, j + 49152);
+          }
+          break;
+        }
+        case 16: {
+          let k = ((tilesizy * (spr.yrepeat | 0)) << 2) | 0;
+          let daz = cstat & 128 ? (spr.z + (k >> 1)) | 0 : spr.z | 0;
+          if (picanm & 0x00ff0000) {
+            daz = (daz - ((picanmYoff(picanm) * (spr.yrepeat | 0)) << 2)) | 0;
+          }
+          let daz2 = (daz - k) | 0;
+          daz = (daz + ceildist) | 0;
+          daz2 = (daz2 - flordist) | 0;
+          if (!(z < daz && z > daz2)) break;
+
+          let xoff = (picanmXoff(picanm) + (spr.xoffset | 0)) | 0;
+          if (cstat & 4) xoff = -xoff;
+          const ang = spr.ang | 0;
+          const xr = spr.xrepeat | 0;
+          let dax = Math.imul(buildTables.sin(ang & 2047), xr) | 0;
+          let day = Math.imul(buildTables.sin((ang + 1536) & 2047), xr) | 0;
+          const l = tilesizx;
+          k = ((l >> 1) + xoff) | 0;
+          let x1 = (sx - mulscale16(dax, k)) | 0;
+          let y1 = (sy - mulscale16(day, k)) | 0;
+          let x2 = (x1 + mulscale16(dax, l)) | 0;
+          let y2 = (y1 + mulscale16(day, l)) | 0;
+          if (clipinsideboxline(cx, cy, x1, y1, x2, y2, rad) === 0) break;
+
+          dax = mulscale14(buildTables.sin((ang + 256 + 512) & 2047), walldist);
+          day = mulscale14(buildTables.sin((ang + 256) & 2047), walldist);
+
+          if (
+            Math.imul((x1 - x) | 0, (y2 - y) | 0) >=
+            Math.imul((x2 - x) | 0, (y1 - y) | 0)
+          ) {
+            addclipline(
+              clipit,
+              x1 + dax,
+              y1 + day,
+              x2 + day,
+              y2 - dax,
+              j + 49152,
+            );
+          } else {
+            if (cstat & 64) break;
+            addclipline(
+              clipit,
+              x2 - dax,
+              y2 - day,
+              x1 - day,
+              y1 + dax,
+              j + 49152,
+            );
+          }
+
+          if (
+            Math.imul((x2 - x1) | 0, (x - x1) | 0) +
+              Math.imul((y2 - y1) | 0, (y - y1) | 0) <
+            0
+          ) {
+            addclipline(
+              clipit,
+              x1 - day,
+              y1 + dax,
+              x1 + dax,
+              y1 + day,
+              j + 49152,
+            );
+          } else if (
+            Math.imul((x1 - x2) | 0, (x - x2) | 0) +
+              Math.imul((y1 - y2) | 0, (y - y2) | 0) <
+            0
+          ) {
+            addclipline(
+              clipit,
+              x2 + day,
+              y2 - dax,
+              x2 - dax,
+              y2 - day,
+              j + 49152,
+            );
+          }
+          break;
+        }
+        case 32: {
+          let daz = (spr.z + ceildist) | 0;
+          let daz2 = (spr.z - flordist) | 0;
+          if (!(z < daz && z > daz2)) break;
+          if (cstat & 64) {
+            if ((z > spr.z) === ((cstat & 8) === 0)) break;
+          }
+
+          let xoff = (picanmXoff(picanm) + (spr.xoffset | 0)) | 0;
+          let yoff = (picanmYoff(picanm) + (spr.yoffset | 0)) | 0;
+          if (cstat & 4) xoff = -xoff;
+          if (cstat & 8) yoff = -yoff;
+
+          const ang = spr.ang | 0;
+          const cosang = buildTables.sin((ang + 512) & 2047);
+          const sinang = buildTables.sin(ang & 2047);
+          const xspan = tilesizx;
+          const yspan = tilesizy;
+          const xrepeat = spr.xrepeat | 0;
+          const yrepeat = spr.yrepeat | 0;
+
+          let dax = (((xspan >> 1) + xoff) * xrepeat) | 0;
+          let day = (((yspan >> 1) + yoff) * yrepeat) | 0;
+          const rxi = new Int32Array(4);
+          const ryi = new Int32Array(4);
+          rxi[0] = (sx + dmulscale16(sinang, dax, cosang, day)) | 0;
+          ryi[0] = (sy + dmulscale16(sinang, day, -cosang, dax)) | 0;
+          let l = (xspan * xrepeat) | 0;
+          rxi[1] = (rxi[0] - mulscale16(sinang, l)) | 0;
+          ryi[1] = (ryi[0] + mulscale16(cosang, l)) | 0;
+          l = (yspan * yrepeat) | 0;
+          let kk = -mulscale16(cosang, l);
+          rxi[2] = (rxi[1] + kk) | 0;
+          rxi[3] = (rxi[0] + kk) | 0;
+          kk = -mulscale16(sinang, l);
+          ryi[2] = (ryi[1] + kk) | 0;
+          ryi[3] = (ryi[0] + kk) | 0;
+
+          dax = mulscale14(buildTables.sin((ang - 256 + 512) & 2047), walldist);
+          day = mulscale14(buildTables.sin((ang - 256) & 2047), walldist);
+
+          if (
+            Math.imul((rxi[0] - x) | 0, (ryi[1] - y) | 0) <
+            Math.imul((rxi[1] - x) | 0, (ryi[0] - y) | 0)
+          ) {
+            if (
+              clipinsideboxline(cx, cy, rxi[1], ryi[1], rxi[0], ryi[0], rad) !==
+              0
+            ) {
+              addclipline(
+                clipit,
+                rxi[1] - day,
+                ryi[1] + dax,
+                rxi[0] + dax,
+                ryi[0] + day,
+                j + 49152,
+              );
+            }
+          } else if (
+            Math.imul((rxi[2] - x) | 0, (ryi[3] - y) | 0) <
+            Math.imul((rxi[3] - x) | 0, (ryi[2] - y) | 0)
+          ) {
+            if (
+              clipinsideboxline(cx, cy, rxi[3], ryi[3], rxi[2], ryi[2], rad) !==
+              0
+            ) {
+              addclipline(
+                clipit,
+                rxi[3] + day,
+                ryi[3] - dax,
+                rxi[2] - dax,
+                ryi[2] - day,
+                j + 49152,
+              );
+            }
+          }
+
+          if (
+            Math.imul((rxi[1] - x) | 0, (ryi[2] - y) | 0) <
+            Math.imul((rxi[2] - x) | 0, (ryi[1] - y) | 0)
+          ) {
+            if (
+              clipinsideboxline(cx, cy, rxi[2], ryi[2], rxi[1], ryi[1], rad) !==
+              0
+            ) {
+              addclipline(
+                clipit,
+                rxi[2] - dax,
+                ryi[2] - day,
+                rxi[1] - day,
+                ryi[1] + dax,
+                j + 49152,
+              );
+            }
+          } else if (
+            Math.imul((rxi[3] - x) | 0, (ryi[0] - y) | 0) <
+            Math.imul((rxi[0] - x) | 0, (ryi[3] - y) | 0)
+          ) {
+            if (
+              clipinsideboxline(cx, cy, rxi[0], ryi[0], rxi[3], ryi[3], rad) !==
+              0
+            ) {
+              addclipline(
+                clipit,
+                rxi[0] + dax,
+                ryi[0] + day,
+                rxi[3] + day,
+                ryi[3] - dax,
+                j + 49152,
+              );
+            }
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    }
   }
   return clipsectorlist;
 }
@@ -386,6 +670,7 @@ function collectWallClips(
  * ENGINE.C clipmove — updates x/y/sectnum only (not z).
  * @param {object} opts
  * @param {import('./Board.js').Board} opts.board
+ * @param {import('../grp/ArtTiles.js').ArtTiles} [opts.art]
  * @param {number} opts.x
  * @param {number} opts.y
  * @param {number} opts.z
@@ -400,6 +685,7 @@ function collectWallClips(
  */
 export function clipmove(opts) {
   const board = opts.board;
+  const art = opts.art ?? null;
   let x = opts.x | 0;
   let y = opts.y | 0;
   const z = opts.z | 0;
@@ -409,7 +695,9 @@ export function clipmove(opts) {
   const walldist = opts.walldist ?? 164;
   const ceildist = opts.ceildist ?? (4 << 8);
   const flordist = opts.flordist ?? (20 << 8);
-  const dawalclipmask = (opts.cliptype ?? CLIPMASK0) & 0xffff;
+  const cliptype = opts.cliptype ?? CLIPMASK0;
+  const dawalclipmask = cliptype & 0xffff;
+  const dasprclipmask = (cliptype >>> 16) & 0xffff;
 
   if (((xvect | yvect) === 0) || sectnum < 0 || !board) {
     return { x, y, z, sectnum, hit: 0 };
@@ -424,8 +712,9 @@ export function clipmove(opts) {
 
   /** @type {ClipLine[]} */
   const clipit = [];
-  const clipsectorlist = collectWallClips(
+  const clipsectorlist = collectClipLines(
     board,
+    art,
     x,
     y,
     z,
@@ -436,6 +725,7 @@ export function clipmove(opts) {
     ceildist,
     flordist,
     dawalclipmask,
+    dasprclipmask,
     clipit,
   );
 
@@ -546,9 +836,10 @@ export function clipmove(opts) {
 }
 
 /**
- * ENGINE.C getzrange — sector floors/ceilings in walldist box (sprites later).
+ * ENGINE.C getzrange — sector + sprite floors/ceilings in walldist box.
  * @param {object} opts
  * @param {import('./Board.js').Board} opts.board
+ * @param {import('../grp/ArtTiles.js').ArtTiles} [opts.art]
  * @param {number} opts.x
  * @param {number} opts.y
  * @param {number} opts.z
@@ -559,12 +850,15 @@ export function clipmove(opts) {
  */
 export function getzrange(opts) {
   const board = opts.board;
+  const art = opts.art ?? null;
   const x = opts.x | 0;
   const y = opts.y | 0;
   const z = opts.z | 0;
   let sectnum = opts.sectnum | 0;
   const walldist = opts.walldist ?? 163;
-  const dawalclipmask = (opts.cliptype ?? CLIPMASK0) & 0xffff;
+  const cliptype = opts.cliptype ?? CLIPMASK0;
+  const dawalclipmask = cliptype & 0xffff;
+  const dasprclipmask = (cliptype >>> 16) & 0xffff;
 
   if (sectnum < 0 || !board) {
     return {
@@ -664,6 +958,168 @@ export function getzrange(opts) {
       }
     }
     clipsectcnt++;
+  }
+
+  if (art && dasprclipmask) {
+    if (!buildTables.loaded) buildTables.generateFallback();
+    const sprites = board.sprites;
+    for (let si = 0; si < clipsectorlist.length; si++) {
+      const dasect = clipsectorlist[si];
+      for (let j = 0; j < sprites.length; j++) {
+        const spr = sprites[j];
+        if ((spr.sectnum | 0) !== dasect) continue;
+        const cstat = spr.cstat | 0;
+        if ((cstat & dasprclipmask) === 0) continue;
+
+        let sx = spr.x | 0;
+        let sy = spr.y | 0;
+        const tilenum = spr.picnum & 0xffff;
+        const tilesizx = art.tilesizx[tilenum] | 0;
+        const tilesizy = art.tilesizy[tilenum] | 0;
+        const picanm = art.picanm[tilenum] | 0;
+
+        let clipyou = 0;
+        let daz = 0;
+        let daz2 = 0;
+
+        switch (cstat & 48) {
+          case 0: {
+            const k = (walldist + (spr.clipdist << 2) + 1) | 0;
+            if (klabs(sx - x) <= k && klabs(sy - y) <= k) {
+              daz = spr.z | 0;
+              let kk = ((tilesizy * (spr.yrepeat | 0)) << 1) | 0;
+              if (cstat & 128) daz = (daz + kk) | 0;
+              if (picanm & 0x00ff0000) {
+                daz =
+                  (daz - ((picanmYoff(picanm) * (spr.yrepeat | 0)) << 2)) | 0;
+              }
+              daz2 = (daz - (kk << 1)) | 0;
+              clipyou = 1;
+            }
+            break;
+          }
+          case 16: {
+            let xoff = (picanmXoff(picanm) + (spr.xoffset | 0)) | 0;
+            if (cstat & 4) xoff = -xoff;
+            const ang = spr.ang | 0;
+            const xr = spr.xrepeat | 0;
+            let dax = Math.imul(buildTables.sin(ang & 2047), xr) | 0;
+            let day = Math.imul(buildTables.sin((ang + 1536) & 2047), xr) | 0;
+            const l = tilesizx;
+            let k = ((l >> 1) + xoff) | 0;
+            let x1 = (sx - mulscale16(dax, k)) | 0;
+            let y1 = (sy - mulscale16(day, k)) | 0;
+            let x2 = (x1 + mulscale16(dax, l)) | 0;
+            let y2 = (y1 + mulscale16(day, l)) | 0;
+            if (clipinsideboxline(x, y, x1, y1, x2, y2, walldist + 1) !== 0) {
+              daz = spr.z | 0;
+              k = ((tilesizy * (spr.yrepeat | 0)) << 1) | 0;
+              if (cstat & 128) daz = (daz + k) | 0;
+              if (picanm & 0x00ff0000) {
+                daz =
+                  (daz - ((picanmYoff(picanm) * (spr.yrepeat | 0)) << 2)) | 0;
+              }
+              daz2 = (daz - (k << 1)) | 0;
+              clipyou = 1;
+            }
+            break;
+          }
+          case 32: {
+            daz = spr.z | 0;
+            daz2 = daz;
+            if (cstat & 64) {
+              if ((z > daz) === ((cstat & 8) === 0)) continue;
+            }
+
+            let xoff = (picanmXoff(picanm) + (spr.xoffset | 0)) | 0;
+            let yoff = (picanmYoff(picanm) + (spr.yoffset | 0)) | 0;
+            if (cstat & 4) xoff = -xoff;
+            if (cstat & 8) yoff = -yoff;
+
+            const ang = spr.ang | 0;
+            const cosang = buildTables.sin((ang + 512) & 2047);
+            const sinang = buildTables.sin(ang & 2047);
+            const xspan = tilesizx;
+            const yspan = tilesizy;
+            const xrepeat = spr.xrepeat | 0;
+            const yrepeat = spr.yrepeat | 0;
+
+            let dax = (((xspan >> 1) + xoff) * xrepeat) | 0;
+            let day = (((yspan >> 1) + yoff) * yrepeat) | 0;
+            let x1 = (sx + dmulscale16(sinang, dax, cosang, day) - x) | 0;
+            let y1 = (sy + dmulscale16(sinang, day, -cosang, dax) - y) | 0;
+            let l = (xspan * xrepeat) | 0;
+            let x2 = (x1 - mulscale16(sinang, l)) | 0;
+            let y2 = (y1 + mulscale16(cosang, l)) | 0;
+            l = (yspan * yrepeat) | 0;
+            let k = -mulscale16(cosang, l);
+            let x3 = (x2 + k) | 0;
+            let x4 = (x1 + k) | 0;
+            k = -mulscale16(sinang, l);
+            let y3 = (y2 + k) | 0;
+            let y4 = (y1 + k) | 0;
+
+            dax = mulscale14(
+              buildTables.sin((ang - 256 + 512) & 2047),
+              walldist + 4,
+            );
+            day = mulscale14(buildTables.sin((ang - 256) & 2047), walldist + 4);
+            x1 = (x1 + dax) | 0;
+            x2 = (x2 - day) | 0;
+            x3 = (x3 - dax) | 0;
+            x4 = (x4 + day) | 0;
+            y1 = (y1 + day) | 0;
+            y2 = (y2 + dax) | 0;
+            y3 = (y3 - day) | 0;
+            y4 = (y4 - dax) | 0;
+
+            // ENGINE.C xor point-in-quad test
+            if ((y1 ^ y2) < 0) {
+              if ((x1 ^ x2) < 0) {
+                clipyou ^=
+                  (Math.imul(x1, y2) < Math.imul(x2, y1) ? 1 : 0) ^
+                  (y1 < y2 ? 1 : 0);
+              } else if (x1 >= 0) clipyou ^= 1;
+            }
+            if ((y2 ^ y3) < 0) {
+              if ((x2 ^ x3) < 0) {
+                clipyou ^=
+                  (Math.imul(x2, y3) < Math.imul(x3, y2) ? 1 : 0) ^
+                  (y2 < y3 ? 1 : 0);
+              } else if (x2 >= 0) clipyou ^= 1;
+            }
+            if ((y3 ^ y4) < 0) {
+              if ((x3 ^ x4) < 0) {
+                clipyou ^=
+                  (Math.imul(x3, y4) < Math.imul(x4, y3) ? 1 : 0) ^
+                  (y3 < y4 ? 1 : 0);
+              } else if (x3 >= 0) clipyou ^= 1;
+            }
+            if ((y4 ^ y1) < 0) {
+              if ((x4 ^ x1) < 0) {
+                clipyou ^=
+                  (Math.imul(x4, y1) < Math.imul(x1, y4) ? 1 : 0) ^
+                  (y4 < y1 ? 1 : 0);
+              } else if (x4 >= 0) clipyou ^= 1;
+            }
+            break;
+          }
+          default:
+            break;
+        }
+
+        if (clipyou !== 0) {
+          if (z > daz && daz > ceilz) {
+            ceilz = daz;
+            ceilhit = j + 49152;
+          }
+          if (z < daz2 && daz2 < florz) {
+            florz = daz2;
+            florhit = j + 49152;
+          }
+        }
+      }
+    }
   }
 
   return { ceilz, ceilhit, florz, florhit };
@@ -799,6 +1255,7 @@ export function pushmove(opts) {
  * Matches GAME.C / PLAYER.C order (simplified gravity: stick to floor).
  * @param {object} opts
  * @param {import('./Board.js').Board} opts.board
+ * @param {import('../grp/ArtTiles.js').ArtTiles} [opts.art]
  * @param {number} opts.x
  * @param {number} opts.y
  * @param {number} opts.z
@@ -817,9 +1274,11 @@ export function movePlayer(opts) {
   const ceildist = opts.ceildist ?? (4 << 8);
   const flordist = opts.flordist ?? (20 << 8);
   const cliptype = opts.cliptype ?? CLIPMASK0;
+  const art = opts.art;
 
   let r = clipmove({
     board: opts.board,
+    art,
     x: opts.x,
     y: opts.y,
     z: opts.z,
@@ -864,6 +1323,7 @@ export function movePlayer(opts) {
 
   const zr = getzrange({
     board: opts.board,
+    art,
     x: r.x,
     y: r.y,
     z: r.z,
