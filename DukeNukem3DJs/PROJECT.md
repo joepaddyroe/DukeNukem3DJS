@@ -53,7 +53,7 @@ If you are picking up this project with no chat history:
 5. Respect **§2–3** (SOLID + layers) before editing.
 6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** (`ceilsprite`) + maskwalls. **`clipmove`** walls + blocking sprites. Duke **play tic** subset (gravity / jump / crouch / friction walk). 4:3 presentation.
+**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (USE / lotag 20–22). 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -67,7 +67,7 @@ If you are picking up this project with no chat history:
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor (ceilsprite) + maskwalls |
 | **P2** | Player movement + `clipmove` | Partial — walls + sprite clips + getzrange/pushmove |
-| **P3** | Duke play loop | Partial — gravity/jump/crouch/`processinput` walk; no weapons/actors/CON |
+| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors 20–22; no actors/CON |
 
 ---
 
@@ -293,7 +293,7 @@ Board load          ████████░░   ~85%   E1L1 + updatesector/
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
 Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
 drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceilsprite + maskwalls
-Duke play loop      ███░░░░░░░   ~25%   gravity/jump/crouch/friction walk; no weapons
+Duke play loop      █████░░░░░   ~50%   pistol + doors 20–22; no actors/CON
 ```
 
 ### 12.2 Done well
@@ -305,12 +305,15 @@ Duke play loop      ███░░░░░░░   ~25%   gravity/jump/crouch/
 | drawrooms | `render/DrawRooms.js`, `FlatScan.js`, `Grouscan.js`, `ParallaxSky.js` | Portals, flats, grouscan+fog, LA parascan sky |
 | drawmasks | `render/DrawMasks.js` | Face + wall + floor (`ceilsprite`) + maskwalls |
 | clipmove | `engine/ClipMove.js` | Wall + sprite clips, raytrace slide, pushmove, getzrange |
-| Play tic | `game/Player.js`, `GetInput.js`, `ProcessInput.js` | Gravity, Space jump, Ctrl crouch, friction + clipmove |
-| Look around | `platform/input/Keyboard.js` | WASD + turn |
+| hitscan | `engine/Hitscan.js` | Walls/floors/sprites CLIPMASK1 |
+| Play tic | `game/Player.js`, `GetInput.js`, `ProcessInput.js` | Gravity, Space jump, Z/C crouch, friction + clipmove |
+| Pistol | `game/Weapons.js`, `render/WeaponHud.js` | Kickback, shoot spark, bulletholes, FIRSTGUN HUD |
+| Doors | `game/Operate.js`, `Animate.js`, `engine/NearTag.js` | USE (E), lotag 20/21/22 ceiling/floor/split |
+| Look around | `platform/input/Keyboard.js` | WASD + turn + mouse fire |
 
 ### 12.3 Missing / next
 
-Weapons / actors / CON; water/jetpack; fall damage / sounds.
+Actors / CON; sliding doors (lotag 9); switches; other weapons; water/jetpack; sounds.
 
 ---
 
@@ -326,8 +329,8 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `Grouscan.js`, `FlatScan.js` · `ENGINE.C` |
 | P2 | `clipmove` + player | Partial — walls + sprites + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
 | P2 | Sprites / masks | Partial — face/wall/floor ceilsprite | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
-| P3 | Duke play loop | Partial — processinput walk/jump/crouch | `game/ProcessInput.js` · `PLAYER.C` |
-| P3 | Duke weapons / actors | Game feel | `ACTORS.C`, `PLAYER.C` |
+| P3 | Duke play loop | Partial — processinput + pistol + doors | `game/ProcessInput.js`, `Weapons.js`, `Operate.js` |
+| P3 | Duke weapons / actors | Partial — pistol only; no CON actors | `ACTORS.C`, `PLAYER.C` |
 
 ---
 
@@ -339,6 +342,8 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | Blit indexed pixels to the page | `platform/video/CanvasVideoOutput.js` |
 | Keyboard look / move | `platform/input/Keyboard.js`, `game/GetInput.js` |
 | Duke play tic (jump/crouch/gravity) | `game/ProcessInput.js`, `game/Player.js`, `app/Game.js` |
+| Pistol / hitscan | `game/Weapons.js`, `engine/Hitscan.js`, `render/WeaponHud.js` |
+| Doors / USE | `game/Operate.js`, `Animate.js`, `engine/NearTag.js` |
 | Wire startup | `main.js` |
 | Screen size constants | `core/renderConstants.js` |
 | Timer / tic constants | `core/gameConstants.js` |
@@ -387,7 +392,7 @@ When unsure how something should work: open the C file in `BuildEngine/src/` or 
 cd "DukeNukem3DJs"
 python -m http.server 8080
 # → http://localhost:8080
-# Controls: WASD move · ←→ or Q/E turn · Space jump · Ctrl crouch (click page first for focus)
+# Controls: WASD move · ←→ or Q turn · E use/open · Space jump · Z/C crouch · Ctrl or LMB fire (click page first for focus)
 ```
 
 User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is implemented. Do not commit commercial game data.
@@ -440,6 +445,9 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-21 | Floor sprites: ENGINE.C `ceilsprite`/`ceilspritehline` (frustum clip + horizlookup UV); replace affine tris |
 | 2026-07-21 | Slope distance fog: `getpalookup`/`globvis` in `grouscan` (ENGINE.C slopalookup shade math) |
 | 2026-07-21 | Duke play tic subset: `Player` + `getinput`/`processinput` (gravity, Space jump, Ctrl crouch, friction walk + clipmove) |
+| 2026-07-21 | Pistol subset: ENGINE.C `hitscan`, shoot spark + bulletholes, FIRSTGUN HUD (`Weapons.js` / `WeaponHud.js`); fire = Ctrl/LMB, crouch = Z/C |
+| 2026-07-21 | Gun HUD: `gun_pos` + `weapon_sway` rest bob (PLAYER.C displayweapon) |
+| 2026-07-21 | Doors: `neartag` + `operatesectors` lotag 20/21/22 + `doanimations`; USE = E |
 
 ---
 

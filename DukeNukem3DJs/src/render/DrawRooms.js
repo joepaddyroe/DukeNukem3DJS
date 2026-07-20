@@ -155,7 +155,7 @@ export class DrawRooms {
     const d = this.debug;
     if (!d) return '';
     const play = this.playDebug
-      ? `ground=${this.playDebug.on_ground} jump=${this.playDebug.jumping_counter} zv=${this.playDebug.poszv}\n`
+      ? `ground=${this.playDebug.on_ground} jump=${this.playDebug.jumping_counter} zv=${this.playDebug.poszv} ammo=${this.playDebug.ammo ?? '?'} kb=${this.playDebug.kb ?? 0} use=${this.playDebug.use ?? '-'} hit=${this.playDebug.hit ?? '-'}\n`
       : '';
     return (
       `spawn=${d.source} sect=${this.cursectnum} inside=${d.inside} vis=${this.debugVisMode}\n` +
@@ -164,7 +164,7 @@ export class DrawRooms {
       `spriteZ=${d.spriteZ} florz-EYE=${d.floorMinusEye} Δ=${d.zDeltaVsSnap}\n` +
       play +
       `scans=${this.lastNumscans} bunches=${this.lastNumbunches} openCols=${this.lastOpenCols} got=${this.gotSectors.size}\n` +
-      `keys: WASD · ←→/QE · Space jump · Ctrl crouch · 1/2/3 vis`
+      `keys: WASD · ←→/Q · E use · Space jump · Z/C crouch · Ctrl/LMB fire`
     );
   }
 

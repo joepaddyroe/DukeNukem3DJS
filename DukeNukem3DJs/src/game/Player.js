@@ -1,7 +1,9 @@
 /**
  * Duke player_struct subset — DUKE3D.H / PLAYER.C.
- * Full weapons / inventory / CON later.
+ * Full inventory / CON later.
  */
+import { initPistol } from './Weapons.js';
+
 export class Player {
   constructor() {
     this.posx = 0;
@@ -24,6 +26,26 @@ export class Player {
 
     /** Input turn hold timer (PLAYER.C turnheldtime). */
     this.turnheldtime = 0;
+
+    this.curr_weapon = 0;
+    this.kickback_pic = 0;
+    this.weapon_pos = 0;
+    /** PLAYER.C weapon_sway — rest is 1024 */
+    this.weapon_sway = 1024;
+    this.look_ang = 0;
+    this.toggle_key_flag = 0;
+    /** @type {string|null} */
+    this.lastUse = null;
+    /** @type {number[]} */
+    this.ammo_amount = [];
+    /** @type {number[]} */
+    this.gotweapon = [];
+    /** @type {{ index: number, life: number }[]} */
+    this.fxSprites = [];
+    /** @type {object|null} */
+    this.lastHit = null;
+
+    initPistol(this);
   }
 
   /**
@@ -47,6 +69,15 @@ export class Player {
     this.hard_landing = 0;
     this.spritebridge = 0;
     this.turnheldtime = 0;
+    this.kickback_pic = 0;
+    this.weapon_pos = 0;
+    this.weapon_sway = 1024;
+    this.look_ang = 0;
+    this.toggle_key_flag = 0;
+    this.lastUse = null;
+    this.fxSprites = [];
+    this.lastHit = null;
+    initPistol(this);
   }
 
   /**

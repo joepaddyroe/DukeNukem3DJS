@@ -1,5 +1,5 @@
 /**
- * Keyboard state for look / move (platform layer).
+ * Keyboard + mouse button state for look / move / fire (platform layer).
  */
 export class Keyboard {
   constructor() {
@@ -7,13 +7,14 @@ export class Keyboard {
     this.down = new Set();
     /** @type {Set<string>} */
     this.pressed = new Set();
+    /** @type {Set<number>} */
+    this.mouseDown = new Set();
 
     this._onDown = (e) => {
       if (!this.down.has(e.code)) {
         this.pressed.add(e.code);
       }
       this.down.add(e.code);
-      // Keep arrows/WASD from scrolling the page
       if (
         e.code === 'ArrowLeft' ||
         e.code === 'ArrowRight' ||
@@ -25,6 +26,8 @@ export class Keyboard {
         e.code === 'KeyD' ||
         e.code === 'KeyQ' ||
         e.code === 'KeyE' ||
+        e.code === 'KeyZ' ||
+        e.code === 'KeyC' ||
         e.code === 'Space' ||
         e.code === 'ControlLeft' ||
         e.code === 'ControlRight' ||
@@ -40,14 +43,35 @@ export class Keyboard {
     this._onUp = (e) => {
       this.down.delete(e.code);
     };
+    this._onMouseDown = (e) => {
+      this.mouseDown.add(e.button);
+      e.preventDefault();
+    };
+    this._onMouseUp = (e) => {
+      this.mouseDown.delete(e.button);
+    };
+    this._onContext = (e) => {
+      e.preventDefault();
+    };
 
     window.addEventListener('keydown', this._onDown);
     window.addEventListener('keyup', this._onUp);
+    window.addEventListener('mousedown', this._onMouseDown);
+    window.addEventListener('mouseup', this._onMouseUp);
+    window.addEventListener('contextmenu', this._onContext);
   }
 
   /** @param {string} code */
   isDown(code) {
     return this.down.has(code);
+  }
+
+  /**
+   * Mouse button down (0 = left).
+   * @param {number} button
+   */
+  isMouseDown(button) {
+    return this.mouseDown.has(button);
   }
 
   /**
@@ -63,5 +87,8 @@ export class Keyboard {
   dispose() {
     window.removeEventListener('keydown', this._onDown);
     window.removeEventListener('keyup', this._onUp);
+    window.removeEventListener('mousedown', this._onMouseDown);
+    window.removeEventListener('mouseup', this._onMouseUp);
+    window.removeEventListener('contextmenu', this._onContext);
   }
 }

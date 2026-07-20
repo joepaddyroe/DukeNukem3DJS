@@ -5,6 +5,9 @@
 import { Player } from '../game/Player.js';
 import { getInput } from '../game/GetInput.js';
 import { processInput } from '../game/ProcessInput.js';
+import { processWeapon, pistolHudTiles, PISTOL_WEAPON } from '../game/Weapons.js';
+import { processUse } from '../game/Operate.js';
+import { doAnimations, clearAnimations } from '../game/Animate.js';
 
 export class Game {
   /**
@@ -27,6 +30,7 @@ export class Game {
   bindPlayerFromWorld() {
     const rooms = this.renderer.drawRooms;
     if (!rooms) return;
+    clearAnimations();
     this.player.resetFromCamera(rooms);
     this._playerReady = true;
   }
@@ -36,7 +40,6 @@ export class Game {
     const rooms = this.renderer.drawRooms;
     const kb = this.renderer.keyboard;
 
-    // Vis debug (edge-triggered) stays on renderer keyboard
     if (kb && rooms) {
       if (kb.wasPressed('Digit1') || kb.wasPressed('Numpad1')) {
         rooms.debugVisMode = 'normal';
@@ -61,11 +64,20 @@ export class Game {
 
     const sync = getInput(kb, this.player, { autoRun: true });
     processInput(this.player, rooms.board, rooms.art, sync);
+    processWeapon(this.player, rooms.board, rooms.art, sync);
+    processUse(this.player, rooms.board, rooms.art, sync);
+    doAnimations(rooms.board, this.player);
     this.player.applyToCamera(rooms);
     rooms.setPlayDebug({
       on_ground: this.player.on_ground,
       jumping_counter: this.player.jumping_counter,
       poszv: this.player.poszv,
+      ammo: this.player.ammo_amount[PISTOL_WEAPON],
+      kb: this.player.kickback_pic,
+      use: this.player.lastUse ?? '-',
+      hit: this.player.lastHit
+        ? `w=${this.player.lastHit.hitwall} s=${this.player.lastHit.hitsprite}`
+        : '-',
     });
     rooms._refreshDebug?.();
   }
@@ -73,6 +85,10 @@ export class Game {
   /** Present one frame. */
   frame() {
     this.renderer.render();
+    const rooms = this.renderer.drawRooms;
+    if (rooms?.art) {
+      this.renderer.drawWeaponOverlay(pistolHudTiles(this.player));
+    }
     this.output.present(this.renderer.pixels);
   }
 }

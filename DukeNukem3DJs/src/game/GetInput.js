@@ -14,9 +14,12 @@ const MAXVEL = (NORMALKEYMOVE * 2) + 10;
 const MAXSVEL = MAXVEL;
 const MAXANGVEL = 127;
 
-/** Sync bit 0 = jump, bit 1 = crouch (PLAYER.C). */
+/** Sync bit 0 = jump, bit 1 = crouch, bit 2 = fire (PLAYER.C). */
 export const BIT_JUMP = 1;
 export const BIT_CROUCH = 2;
+export const BIT_FIRE = 4;
+/** PLAYER.C loc.bits bit 29 — Open / USE */
+export const BIT_OPEN = 1 << 29;
 
 /**
  * @param {import('../platform/input/Keyboard.js').Keyboard} kb
@@ -30,7 +33,17 @@ export function getInput(kb, player, opts = {}) {
 
   let bits = 0;
   if (kb.isDown('Space')) bits |= BIT_JUMP;
-  if (kb.isDown('ControlLeft') || kb.isDown('ControlRight')) bits |= BIT_CROUCH;
+  // Z/C crouch (vanilla-ish); Ctrl+mouse = fire like classic Duke
+  if (kb.isDown('KeyZ') || kb.isDown('KeyC')) bits |= BIT_CROUCH;
+  if (
+    kb.isDown('ControlLeft') ||
+    kb.isDown('ControlRight') ||
+    kb.isMouseDown(0)
+  ) {
+    bits |= BIT_FIRE;
+  }
+  // E = Open/USE (turn stays on arrows + Q)
+  if (kb.isDown('KeyE')) bits |= BIT_OPEN;
 
   let turnamount;
   let keymove;
@@ -52,7 +65,7 @@ export function getInput(kb, player, opts = {}) {
   if (kb.isDown('KeyD')) svel -= keymove;
 
   const turnLeft = kb.isDown('ArrowLeft') || kb.isDown('KeyQ');
-  const turnRight = kb.isDown('ArrowRight') || kb.isDown('KeyE');
+  const turnRight = kb.isDown('ArrowRight');
   if (turnLeft) {
     player.turnheldtime += 1;
     angvel -= player.turnheldtime >= TURBOTURNTIME ? turnamount : PREAMBLETURN;

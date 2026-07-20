@@ -5,6 +5,7 @@ import { VlineDrawer } from './VlineDrawer.js';
 import { HlineDrawer } from './HlineDrawer.js';
 import { DrawRooms } from './DrawRooms.js';
 import { DrawMasks } from './DrawMasks.js';
+import { drawWeaponHud } from './WeaponHud.js';
 
 /**
  * Software renderer facade — Build ENGINE.C pixel path + drawrooms.
@@ -95,5 +96,15 @@ export class SoftwareRenderer {
     if (this.drawRooms) {
       this.drawRooms.drawrooms();
     }
+  }
+
+  /**
+   * GAME.C myospal weapon overlay after drawrooms.
+   * @param {{ pic: number, x: number, y: number }[]} tiles
+   */
+  drawWeaponOverlay(tiles) {
+    const art = this.drawRooms?.art;
+    if (!art || !tiles?.length) return;
+    drawWeaponHud(this.buffer, art, tiles);
   }
 }
