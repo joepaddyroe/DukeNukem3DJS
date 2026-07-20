@@ -386,6 +386,9 @@ export class DrawRooms {
       if (sn === undefined || this.gotSectors.has(sn)) continue;
       this.gotSectors.add(sn);
 
+      // ENGINE.C scansector: collect tsprites when sector is first visited
+      if (this.drawMasks) this.drawMasks.queueSectorSprites(this, sn);
+
       const sec = board.sectors[sn];
       const startwall = sec.wallptr;
       const endwall = startwall + sec.wallnum;
@@ -781,11 +784,6 @@ export class DrawRooms {
       andwstat2 &= this.wallMost(this.dplc, s, sectnum, true);
     });
 
-    if (this.drawMasks) {
-      this.drawMasks.queueSectorSprites(this, sectnum, xLo, xHi);
-    }
-
-    // ENGINE.C: skip planes only when fully clipped (andwstat)
     if ((andwstat1 & 3) !== 3 || (andwstat2 & 12) !== 12) {
       this.drawBunchPlanes(
         sectnum,
@@ -1069,7 +1067,7 @@ export class DrawRooms {
     const nextsec =
       nextsectnum >= 0 ? board.sectors[nextsectnum] : null;
 
-    // Skip if fully occluded
+    // Skip if fully occluded — ENGINE.C still stores smost type 0
     let any = false;
     for (let x = x1; x <= x2; x++) {
       if (this.umost[x] < this.dmost[x]) {
@@ -1077,7 +1075,10 @@ export class DrawRooms {
         break;
       }
     }
-    if (!any) return;
+    if (!any) {
+      if (this.drawMasks) this.drawMasks.addSmostType0(scan);
+      return;
+    }
 
     const z0 = getzsofslope(board, sectnum, wal.x, wal.y);
     const z1 = getzsofslope(
@@ -1095,6 +1096,12 @@ export class DrawRooms {
         board.walls[wal.point2].x,
         board.walls[wal.point2].y,
       );
+      const nzCam = getzsofslope(
+        board,
+        nextsectnum,
+        this.posx,
+        this.posy,
+      );
 
       // ENGINE.C cz/fz:
       // [0],[1] = this sector ends; [2],[3] = next sector ends; [4] = next at camera
@@ -1102,15 +1109,19 @@ export class DrawRooms {
       const cz1 = z1.ceilz;
       const cz2 = nz0.ceilz;
       const cz3 = nz1.ceilz;
+      const cz4 = nzCam.ceilz;
       const fz0 = z0.florz;
       const fz1 = z1.florz;
       const fz2 = nz0.florz;
       const fz3 = nz1.florz;
+      const fz4 = nzCam.florz;
 
       const doUpper =
         (sec.ceilingstat & 1) === 0 || (nextsec.ceilingstat & 1) === 0;
       const doLower =
         (sec.floorstat & 1) === 0 || (nextsec.floorstat & 1) === 0;
+
+      const smostMark = this.drawMasks ? this.drawMasks.markSmost() : null;
 
       const tilenum = wal.picnum & 0xffff;
       this.art.loadtile(tilenum);
@@ -1129,7 +1140,6 @@ export class DrawRooms {
       // ——— Ceiling / upper ———
       if (doUpper) {
         if (cz2 <= cz0 && cz3 <= cz1) {
-          // Next ceil raised or equal → close umost to current uplc
           if (this.globparaceilclip) {
             for (let x = x1; x <= x2; x++) {
               if (this.uplc[x] > this.umost[x] && this.umost[x] <= this.dmost[x]) {
@@ -1139,7 +1149,6 @@ export class DrawRooms {
           }
         } else {
           this.wallMost(this.dwall, scan, nextsectnum, false);
-          // Next ceil crosses current floor → clamp dwall to dplc
           if (cz2 > fz0 || cz3 > fz1) {
             for (let i = x1; i <= x2; i++) {
               if (this.dwall[i] > this.dplc[i]) this.dwall[i] = this.dplc[i];
@@ -1180,7 +1189,6 @@ export class DrawRooms {
             }
           }
 
-          // ENGINE.C: both ends next≥current → umost=dwall; else max(uplc,dwall)
           if (cz2 >= cz0 && cz3 >= cz1) {
             for (let x = x1; x <= x2; x++) {
               if (this.umost[x] > this.dmost[x]) continue;
@@ -1194,12 +1202,18 @@ export class DrawRooms {
             }
           }
         }
+        // ENGINE.C: save umost when next ceiling is lower / camera above next ceil
+        if (
+          this.drawMasks &&
+          (cz2 < cz0 || cz3 < cz1 || this.posz < cz4)
+        ) {
+          this.drawMasks.addSmostUmost(scan, x1, x2, this.umost);
+        }
       }
 
       // ——— Floor / lower ———
       if (doLower) {
         if (fz2 >= fz0 && fz3 >= fz1) {
-          // Next floor not raised → close dmost to current dplc
           if (this.globparaflorclip) {
             for (let x = x1; x <= x2; x++) {
               if (this.dplc[x] < this.dmost[x] && this.umost[x] <= this.dmost[x]) {
@@ -1209,7 +1223,6 @@ export class DrawRooms {
           }
         } else {
           this.wallMost(this.uwall, scan, nextsectnum, true);
-          // Next floor crosses current ceil → clamp uwall to uplc
           if (fz2 < cz0 || fz3 < cz1) {
             for (let i = x1; i <= x2; i++) {
               if (this.uwall[i] < this.uplc[i]) this.uwall[i] = this.uplc[i];
@@ -1256,7 +1269,6 @@ export class DrawRooms {
             }
           }
 
-          // ENGINE.C: both ends raised → dmost=uwall; else min(dplc,uwall)
           if (fz2 <= fz0 && fz3 <= fz1) {
             for (let x = x1; x <= x2; x++) {
               if (this.umost[x] > this.dmost[x]) continue;
@@ -1269,6 +1281,13 @@ export class DrawRooms {
               if (i < this.dmost[x]) this.dmost[x] = i;
             }
           }
+        }
+        // ENGINE.C: save dmost when next floor is higher / camera below next floor
+        if (
+          this.drawMasks &&
+          (fz2 > fz0 || fz3 > fz1 || this.posz > fz4)
+        ) {
+          this.drawMasks.addSmostDmost(scan, x1, x2, this.dmost);
         }
       }
 
@@ -1283,7 +1302,13 @@ export class DrawRooms {
             }
           }
         }
-        if (canSee) this.scansector(nextsectnum);
+        if (canSee) {
+          this.scansector(nextsectnum);
+        } else if (this.drawMasks && smostMark) {
+          // Can't see beyond — cancel portal smost, store solid type 0
+          this.drawMasks.restoreSmost(smostMark);
+          this.drawMasks.addSmostType0(scan);
+        }
       }
     } else {
       // Solid / 1-way wall
@@ -1333,6 +1358,7 @@ export class DrawRooms {
         this.umost[x] = 1;
         this.dmost[x] = 0;
       }
+      if (this.drawMasks) this.drawMasks.addSmostType0(scan);
     }
   }
 
@@ -1378,13 +1404,13 @@ export class DrawRooms {
     }
   }
 
-  /** Used by DrawMasks wall sprites. */
+  /** Used by DrawMasks wall sprites — ENGINE.C dmulscale6 path. */
   transform(wx, wy) {
     const x = wx - this.posx;
     const y = wy - this.posy;
     return {
-      xp: (y * this.cos - x * this.sin) >> 6,
-      yp: (x * this.cosVR + y * this.sinVR) >> 6,
+      xp: dmulscale6(y, this.cos, -x, this.sin),
+      yp: dmulscale6(x, this.cosVR, y, this.sinVR),
     };
   }
 
