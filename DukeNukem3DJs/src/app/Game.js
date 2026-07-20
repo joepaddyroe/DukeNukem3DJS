@@ -1,7 +1,11 @@
 /**
- * Top-level game / mode holder (Phase 0 stub).
+ * Top-level game / mode holder.
  * Later: MODE_MENU / MODE_GAME / MODE_DEMO from DUKE3D.H.
  */
+import { Player } from '../game/Player.js';
+import { getInput } from '../game/GetInput.js';
+import { processInput } from '../game/ProcessInput.js';
+
 export class Game {
   /**
    * @param {{
@@ -12,11 +16,58 @@ export class Game {
   constructor({ renderer, output }) {
     this.renderer = renderer;
     this.output = output;
+    /** @type {Player} */
+    this.player = new Player();
+    this._playerReady = false;
+  }
+
+  /**
+   * Seed player from drawrooms spawn after setWorld.
+   */
+  bindPlayerFromWorld() {
+    const rooms = this.renderer.drawRooms;
+    if (!rooms) return;
+    this.player.resetFromCamera(rooms);
+    this._playerReady = true;
   }
 
   /** One simulation tic. */
   tick() {
-    this.renderer.tick();
+    const rooms = this.renderer.drawRooms;
+    const kb = this.renderer.keyboard;
+
+    // Vis debug (edge-triggered) stays on renderer keyboard
+    if (kb && rooms) {
+      if (kb.wasPressed('Digit1') || kb.wasPressed('Numpad1')) {
+        rooms.debugVisMode = 'normal';
+      } else if (kb.wasPressed('Digit2') || kb.wasPressed('Numpad2')) {
+        rooms.debugVisMode = 'wallsOnly';
+      } else if (kb.wasPressed('Digit3') || kb.wasPressed('Numpad3')) {
+        rooms.debugVisMode = 'coverage';
+      }
+    }
+
+    if (!this._playerReady || !rooms || !rooms.board) {
+      if (rooms) rooms.turn(2);
+      return;
+    }
+
+    if (!kb) {
+      rooms.turn(2);
+      this.player.applyToCamera(rooms);
+      rooms._refreshDebug?.();
+      return;
+    }
+
+    const sync = getInput(kb, this.player, { autoRun: true });
+    processInput(this.player, rooms.board, rooms.art, sync);
+    this.player.applyToCamera(rooms);
+    rooms.setPlayDebug({
+      on_ground: this.player.on_ground,
+      jumping_counter: this.player.jumping_counter,
+      poszv: this.player.poszv,
+    });
+    rooms._refreshDebug?.();
   }
 
   /** Present one frame. */

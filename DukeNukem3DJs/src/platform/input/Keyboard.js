@@ -25,6 +25,11 @@ export class Keyboard {
         e.code === 'KeyD' ||
         e.code === 'KeyQ' ||
         e.code === 'KeyE' ||
+        e.code === 'Space' ||
+        e.code === 'ControlLeft' ||
+        e.code === 'ControlRight' ||
+        e.code === 'ShiftLeft' ||
+        e.code === 'ShiftRight' ||
         e.code === 'Digit1' ||
         e.code === 'Digit2' ||
         e.code === 'Digit3'

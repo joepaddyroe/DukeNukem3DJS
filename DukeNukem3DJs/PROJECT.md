@@ -53,7 +53,7 @@ If you are picking up this project with no chat history:
 5. Respect **§2–3** (SOLID + layers) before editing.
 6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** (`ceilsprite`) + maskwalls. **`clipmove`** walls + blocking sprites. 4:3 presentation.
+**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** (`ceilsprite`) + maskwalls. **`clipmove`** walls + blocking sprites. Duke **play tic** subset (gravity / jump / crouch / friction walk). 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -66,7 +66,8 @@ If you are picking up this project with no chat history:
 | **P2** | Textured floors/ceilings (`ceilscan`/`florscan`) | Partial (flat + wall-align + grouscan + distance fog) |
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor (ceilsprite) + maskwalls |
-| **P2** | Player movement + `clipmove` | Partial — walls + sprite clips (face/wall/floor) + getzrange/pushmove |
+| **P2** | Player movement + `clipmove` | Partial — walls + sprite clips + getzrange/pushmove |
+| **P3** | Duke play loop | Partial — gravity/jump/crouch/`processinput` walk; no weapons/actors/CON |
 
 ---
 
@@ -292,6 +293,7 @@ Board load          ████████░░   ~85%   E1L1 + updatesector/
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
 Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
 drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceilsprite + maskwalls
+Duke play loop      ███░░░░░░░   ~25%   gravity/jump/crouch/friction walk; no weapons
 ```
 
 ### 12.2 Done well
@@ -303,11 +305,12 @@ drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceil
 | drawrooms | `render/DrawRooms.js`, `FlatScan.js`, `Grouscan.js`, `ParallaxSky.js` | Portals, flats, grouscan+fog, LA parascan sky |
 | drawmasks | `render/DrawMasks.js` | Face + wall + floor (`ceilsprite`) + maskwalls |
 | clipmove | `engine/ClipMove.js` | Wall + sprite clips, raytrace slide, pushmove, getzrange |
+| Play tic | `game/Player.js`, `GetInput.js`, `ProcessInput.js` | Gravity, Space jump, Ctrl crouch, friction + clipmove |
 | Look around | `platform/input/Keyboard.js` | WASD + turn |
 
 ### 12.3 Missing / next
 
-Duke play loop (weapons / actors / CON).
+Weapons / actors / CON; water/jetpack; fall damage / sounds.
 
 ---
 
@@ -323,6 +326,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `Grouscan.js`, `FlatScan.js` · `ENGINE.C` |
 | P2 | `clipmove` + player | Partial — walls + sprites + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
 | P2 | Sprites / masks | Partial — face/wall/floor ceilsprite | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
+| P3 | Duke play loop | Partial — processinput walk/jump/crouch | `game/ProcessInput.js` · `PLAYER.C` |
 | P3 | Duke weapons / actors | Game feel | `ACTORS.C`, `PLAYER.C` |
 
 ---
@@ -333,7 +337,8 @@ Goal: **visible Build map render** before deep Duke gameplay.
 |-----------------|------------|
 | Change tic rate / frame hooks | `app/GameLoop.js` |
 | Blit indexed pixels to the page | `platform/video/CanvasVideoOutput.js` |
-| Keyboard look / move | `platform/input/Keyboard.js`, `SoftwareRenderer.tick` |
+| Keyboard look / move | `platform/input/Keyboard.js`, `game/GetInput.js` |
+| Duke play tic (jump/crouch/gravity) | `game/ProcessInput.js`, `game/Player.js`, `app/Game.js` |
 | Wire startup | `main.js` |
 | Screen size constants | `core/renderConstants.js` |
 | Timer / tic constants | `core/gameConstants.js` |
@@ -382,7 +387,7 @@ When unsure how something should work: open the C file in `BuildEngine/src/` or 
 cd "DukeNukem3DJs"
 python -m http.server 8080
 # → http://localhost:8080
-# Controls: WASD move · ←→ or Q/E turn (click page first for focus)
+# Controls: WASD move · ←→ or Q/E turn · Space jump · Ctrl crouch (click page first for focus)
 ```
 
 User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is implemented. Do not commit commercial game data.
@@ -434,6 +439,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | Sprite clips in `clipmove`/`getzrange` (face/wall/floor; CLIPMASK0); pass ART for tilesiz/picanm |
 | 2026-07-21 | Floor sprites: ENGINE.C `ceilsprite`/`ceilspritehline` (frustum clip + horizlookup UV); replace affine tris |
 | 2026-07-21 | Slope distance fog: `getpalookup`/`globvis` in `grouscan` (ENGINE.C slopalookup shade math) |
+| 2026-07-21 | Duke play tic subset: `Player` + `getinput`/`processinput` (gravity, Space jump, Ctrl crouch, friction walk + clipmove) |
 
 ---
 

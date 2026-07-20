@@ -84,39 +84,11 @@ export class SoftwareRenderer {
     this.buffer.clearview(color);
   }
 
-  /** Player look / move from keyboard (falls back to slow auto-turn). */
-  tick() {
-    if (!this.drawRooms) return;
-
-    const kb = this.keyboard;
-    if (!kb) {
-      this.drawRooms.turn(2);
-      return;
-    }
-
-    // Vis debug: 1=normal 2=wallsOnly 3=coverage (edge-triggered)
-    if (kb.wasPressed('Digit1') || kb.wasPressed('Numpad1')) {
-      this.drawRooms.debugVisMode = 'normal';
-    } else if (kb.wasPressed('Digit2') || kb.wasPressed('Numpad2')) {
-      this.drawRooms.debugVisMode = 'wallsOnly';
-    } else if (kb.wasPressed('Digit3') || kb.wasPressed('Numpad3')) {
-      this.drawRooms.debugVisMode = 'coverage';
-    }
-
-    let forward = 0;
-    let strafe = 0;
-    let turn = 0;
-    if (kb.isDown('KeyW') || kb.isDown('ArrowUp')) forward += 1;
-    if (kb.isDown('KeyS') || kb.isDown('ArrowDown')) forward -= 1;
-    if (kb.isDown('KeyD')) strafe += 1;
-    if (kb.isDown('KeyA')) strafe -= 1;
-    if (kb.isDown('ArrowLeft') || kb.isDown('KeyQ')) turn -= 24;
-    if (kb.isDown('ArrowRight') || kb.isDown('KeyE')) turn += 24;
-
-    if (forward || strafe || turn) {
-      this.drawRooms.move(forward, strafe, turn);
-    }
-  }
+  /**
+   * Legacy no-op — play tic lives in Game (PLAYER.C processinput subset).
+   * Kept so callers that still invoke renderer.tick do not break.
+   */
+  tick() {}
 
   render() {
     this.clearview(0);

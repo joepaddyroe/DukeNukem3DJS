@@ -129,6 +129,9 @@ export class DrawRooms {
     this.lastNumscans = 0;
     this.lastNumbunches = 0;
     this.lastOpenCols = 0;
+
+    /** @type {{ on_ground?: number, jumping_counter?: number, poszv?: number }|null} */
+    this.playDebug = null;
   }
 
   /**
@@ -151,14 +154,26 @@ export class DrawRooms {
   getDebugStatus() {
     const d = this.debug;
     if (!d) return '';
+    const play = this.playDebug
+      ? `ground=${this.playDebug.on_ground} jump=${this.playDebug.jumping_counter} zv=${this.playDebug.poszv}\n`
+      : '';
     return (
       `spawn=${d.source} sect=${this.cursectnum} inside=${d.inside} vis=${this.debugVisMode}\n` +
       `pos=(${this.posx},${this.posy},${this.posz}) ang=${this.ang}\n` +
       `ceil=${d.ceilz} floor=${d.floorz} eyeAboveFloor=${d.eyeAboveFloor}\n` +
       `spriteZ=${d.spriteZ} florz-EYE=${d.floorMinusEye} Δ=${d.zDeltaVsSnap}\n` +
+      play +
       `scans=${this.lastNumscans} bunches=${this.lastNumbunches} openCols=${this.lastOpenCols} got=${this.gotSectors.size}\n` +
-      `keys: WASD · ←→/QE · 1=normal 2=wallsOnly 3=coverage`
+      `keys: WASD · ←→/QE · Space jump · Ctrl crouch · 1/2/3 vis`
     );
+  }
+
+  /**
+   * Optional play-state line for HUD (set by Game).
+   * @param {{ on_ground?: number, jumping_counter?: number, poszv?: number }|null} st
+   */
+  setPlayDebug(st) {
+    this.playDebug = st;
   }
 
   /** @param {number} deltaAng */
