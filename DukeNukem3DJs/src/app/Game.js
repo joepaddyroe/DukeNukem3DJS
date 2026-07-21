@@ -85,6 +85,7 @@ export class Game {
       on_ground: this.player.on_ground,
       jumping_counter: this.player.jumping_counter,
       poszv: this.player.poszv,
+      hp: this.player.extra,
       ammo: this.player.ammo_amount[PISTOL_WEAPON],
       kb: this.player.kickback_pic,
       use: this.player.lastUse ?? '-',

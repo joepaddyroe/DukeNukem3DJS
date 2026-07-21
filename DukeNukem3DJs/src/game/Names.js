@@ -27,6 +27,18 @@ export const CRYSTALAMMO = 46;
 export const HBOMBAMMO = 47;
 export const AMMOLOTS = 48;
 export const SHOTGUNAMMO = 49;
+export const COLA = 51;
+export const SIXPAK = 52;
+export const FIRSTAID = 53;
+export const SHIELD = 54;
+export const STEROIDS = 55;
+export const AIRTANK = 56;
+export const JETPACK = 57;
+export const HEATSENSOR = 59;
+export const ACCESSCARD = 60;
+export const BOOTS = 61;
+export const HOLODUKE = 1348;
+export const ATOMICHEALTH = 100;
 
 /** Breakables / E1L1 roof (NAMES.H) */
 export const FANSPRITE = 407;

@@ -1208,9 +1208,10 @@ export class DrawMasks {
     const siz = divscale(rooms.xdimenscale, yp, 19);
     if (siz <= 0) return;
 
-    const xv = mulscale16(spr.xrepeat << 16, xyaspect);
-    const xsiz = mulscale30(siz, xv * xspan);
-    const ysiz = mulscale14(siz, spr.yrepeat * yspan);
+    // ENGINE.C: xv = mulscale16(xrepeat<<16, xyaspect); use int32 products
+    const xv = mulscale16((spr.xrepeat | 0) << 16, xyaspect);
+    const xsiz = mulscale30(siz, Math.imul(xv | 0, xspan | 0));
+    const ysiz = mulscale14(siz, Math.imul(spr.yrepeat | 0, yspan | 0));
     if (xsiz <= 1 || ysiz <= 1) return;
     if (xspan >> 11 >= xsiz || yspan >= ysiz >> 1) return;
 
@@ -1220,12 +1221,12 @@ export class DrawMasks {
 
     let x1 = xb - (xsiz >> 1);
     if (xspan & 1) x1 += mulscale31(siz, xv);
-    const iOff = mulscale30(siz, xv * xoff);
+    const iOff = mulscale30(siz, Math.imul(xv | 0, xoff | 0));
     if ((spr.cstat & 4) === 0) x1 -= iOff;
     else x1 += iOff;
 
     let y1 = mulscale16(spr.z - rooms.posz, siz);
-    y1 -= mulscale14(siz, spr.yrepeat * yoff);
+    y1 -= mulscale14(siz, Math.imul(spr.yrepeat | 0, yoff | 0));
     y1 += (rooms.globalhoriz << 8) - ysiz;
     if (spr.cstat & 128) {
       y1 += ysiz >> 1;

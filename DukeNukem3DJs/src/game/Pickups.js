@@ -1,34 +1,46 @@
 /**
  * GAME.CON touch-pickups subset (ifpdistl RETRIEVEDISTANCE) — no CON VM yet.
- * C / CON refs: GAME.CON actor AMMO / SHOTGUNSPRITE / …; GAME.C spawn pal cull.
+ * C / CON refs: GAME.CON actor AMMO / SHOTGUNSPRITE / SIXPAK / …; GAME.C spawn.
  */
 import {
+  ACCESSCARD,
+  AIRTANK,
   AMMO,
   AMMOLOTS,
+  ATOMICHEALTH,
   BATTERYAMMO,
+  BOOTS,
   CHAINGUNSPRITE,
+  COLA,
   CRYSTALAMMO,
   DEVISTATORAMMO,
   DEVISTATORSPRITE,
+  FIRSTAID,
   FIRSTGUNSPRITE,
   FREEZEAMMO,
   FREEZESPRITE,
   GROWAMMO,
   HBOMBAMMO,
-  HEAVYHBOMB,
+  HEATSENSOR,
+  HOLODUKE,
+  JETPACK,
   RPGAMMO,
   RPGSPRITE,
+  SHIELD,
   SHOTGUNAMMO,
   SHOTGUNSPRITE,
   SHRINKERSPRITE,
+  SIXPAK,
+  STEROIDS,
 } from './Names.js';
+import { isItemPic } from './SpawnSetup.js';
 import { nsqrtasm } from '../math/fixed.js';
 import { EYEHEIGHT } from '../engine/SectorQuery.js';
 
 /** USER.CON RETRIEVEDISTANCE */
 export const RETRIEVEDISTANCE = 844;
 
-/** USER.CON ammo box amounts */
+/** USER.CON amounts */
 const PISTOLAMMOAMOUNT = 12;
 const SHOTGUNAMMOAMOUNT = 10;
 const CHAINGUNAMMOAMOUNT = 50;
@@ -49,80 +61,9 @@ export const SHRINKER_WEAPON = 6;
 export const DEVISTATOR_WEAPON = 7;
 export const FREEZE_WEAPON = 10;
 
-/** USER.CON max ammo (subset) */
-const MAX_AMMO = [
-  0, 200, 50, 200, 50, 50, 50, 99, 0, 0, 99, 0,
-];
-
-/**
- * GAME.C spawn: single-player hides pal≠0 pickups / pipebombs,
- * then apply face-sprite size/shade for remaining items.
- * @param {import('../engine/Board.js').Board} board
- */
-export function cullMultiplayerPickups(board) {
-  for (let i = 0; i < board.numsprites; i++) {
-    const sp = board.sprites[i];
-    if ((sp.pal | 0) === 0) continue;
-    const pic = sp.picnum & 0xffff;
-    if (!isSkillCulledPic(pic)) continue;
-    hideSprite(sp);
-  }
-  setupPickupSprites(board);
-}
-
-/**
- * GAME.C spawn pickup visuals — shade -17, AMMO 16×16, weapons 32×32, face cstat.
- * @param {import('../engine/Board.js').Board} board
- */
-export function setupPickupSprites(board) {
-  for (let i = 0; i < board.numsprites; i++) {
-    const sp = board.sprites[i];
-    if ((sp.xrepeat | 0) === 0) continue;
-    if ((sp.cstat | 0) & 32768) continue;
-    const pic = sp.picnum & 0xffff;
-    if (!isPickupPic(pic)) continue;
-
-    sp.pal = 0;
-    sp.shade = -17;
-    sp.cstat = 0;
-    if (pic === AMMO) {
-      sp.xrepeat = 16;
-      sp.yrepeat = 16;
-    } else {
-      sp.xrepeat = 32;
-      sp.yrepeat = 32;
-    }
-  }
-}
-
-/**
- * @param {number} pic
- */
-function isSkillCulledPic(pic) {
-  switch (pic) {
-    case HEAVYHBOMB:
-    case FIRSTGUNSPRITE:
-    case CHAINGUNSPRITE:
-    case SHOTGUNSPRITE:
-    case RPGSPRITE:
-    case SHRINKERSPRITE:
-    case FREEZESPRITE:
-    case DEVISTATORSPRITE:
-    case SHOTGUNAMMO:
-    case FREEZEAMMO:
-    case HBOMBAMMO:
-    case CRYSTALAMMO:
-    case GROWAMMO:
-    case BATTERYAMMO:
-    case DEVISTATORAMMO:
-    case RPGAMMO:
-    case AMMO:
-    case AMMOLOTS:
-      return true;
-    default:
-      return false;
-  }
-}
+const MAX_AMMO = [0, 200, 50, 200, 50, 50, 50, 99, 0, 0, 99, 0];
+const MAX_PLAYER_HEALTH = 100;
+const MAX_ARMOUR = 100;
 
 /**
  * @param {import('../engine/Board.js').Sprite} sp
@@ -134,7 +75,7 @@ function hideSprite(sp) {
 }
 
 /**
- * Touch pickups near the player (GAME.CON ifpdistl path, no ifcanseetarget yet).
+ * Touch pickups near the player (GAME.CON ifpdistl path).
  * @param {import('../engine/Board.js').Board} board
  * @param {import('./Player.js').Player} p
  */
@@ -149,9 +90,8 @@ export function processPickups(board, p) {
     if ((sp.cstat | 0) & 32768) continue;
 
     const pic = sp.picnum & 0xffff;
-    if (!isPickupPic(pic)) continue;
+    if (!isItemPic(pic)) continue;
 
-    // SECTOR.C dist() vs player sprite at floor — use foot z, not eye posz
     const dx = (sp.x | 0) - (p.posx | 0);
     const dy = (sp.y | 0) - (p.posy | 0);
     const footZ = ((p.posz | 0) + EYEHEIGHT) | 0;
@@ -172,6 +112,15 @@ export function processPickups(board, p) {
  * @param {import('./Player.js').Player} p
  */
 function ensureInv(p) {
+  if (p.extra == null) p.extra = MAX_PLAYER_HEALTH;
+  if (p.shield_amount == null) p.shield_amount = 0;
+  if (p.firstaid_amount == null) p.firstaid_amount = 0;
+  if (p.steroids_amount == null) p.steroids_amount = 0;
+  if (p.jetpack_amount == null) p.jetpack_amount = 0;
+  if (p.scuba_amount == null) p.scuba_amount = 0;
+  if (p.heat_amount == null) p.heat_amount = 0;
+  if (p.holoduke_amount == null) p.holoduke_amount = 0;
+  if (p.boot_amount == null) p.boot_amount = 0;
   p.ammo_amount = p.ammo_amount || [];
   p.gotweapon = p.gotweapon || [];
   for (let i = 0; i < 12; i++) {
@@ -181,37 +130,9 @@ function ensureInv(p) {
 }
 
 /**
- * @param {number} pic
- */
-function isPickupPic(pic) {
-  switch (pic) {
-    case AMMO:
-    case AMMOLOTS:
-    case SHOTGUNAMMO:
-    case BATTERYAMMO:
-    case RPGAMMO:
-    case HBOMBAMMO:
-    case CRYSTALAMMO:
-    case GROWAMMO:
-    case DEVISTATORAMMO:
-    case FREEZEAMMO:
-    case FIRSTGUNSPRITE:
-    case SHOTGUNSPRITE:
-    case CHAINGUNSPRITE:
-    case RPGSPRITE:
-    case SHRINKERSPRITE:
-    case FREEZESPRITE:
-    case DEVISTATORSPRITE:
-      return true;
-    default:
-      return false;
-  }
-}
-
-/**
  * @param {import('./Player.js').Player} p
  * @param {number} pic
- * @returns {boolean} true if collected
+ * @returns {boolean}
  */
 function tryTake(p, pic) {
   switch (pic) {
@@ -249,9 +170,55 @@ function tryTake(p, pic) {
       return addWeapon(p, FREEZE_WEAPON, FREEZEAMMOAMOUNT);
     case DEVISTATORSPRITE:
       return addWeapon(p, DEVISTATOR_WEAPON, DEVISTATORAMMOAMOUNT);
+    case COLA:
+      return addHealth(p, 10);
+    case SIXPAK:
+      return addHealth(p, 30);
+    case ATOMICHEALTH:
+      return addHealth(p, 50);
+    case FIRSTAID:
+      if ((p.firstaid_amount | 0) >= 100) return false;
+      p.firstaid_amount = 100;
+      return true;
+    case SHIELD:
+      if ((p.shield_amount | 0) >= MAX_ARMOUR) return false;
+      p.shield_amount = Math.min(MAX_ARMOUR, (p.shield_amount | 0) + 50);
+      return true;
+    case STEROIDS:
+      p.steroids_amount = 400;
+      return true;
+    case AIRTANK:
+      p.scuba_amount = 6400;
+      return true;
+    case JETPACK:
+      p.jetpack_amount = 1600;
+      return true;
+    case HEATSENSOR:
+      p.heat_amount = 1200;
+      return true;
+    case HOLODUKE:
+      p.holoduke_amount = 2400;
+      return true;
+    case BOOTS:
+      p.boot_amount = 200;
+      return true;
+    case ACCESSCARD:
+      p.lastUse = 'access card';
+      return true;
     default:
       return false;
   }
+}
+
+/**
+ * @param {import('./Player.js').Player} p
+ * @param {number} amount
+ */
+function addHealth(p, amount) {
+  const cur = p.extra | 0;
+  if (cur >= MAX_PLAYER_HEALTH) return false;
+  p.extra = Math.min(MAX_PLAYER_HEALTH, cur + (amount | 0));
+  return true;
 }
 
 /**
@@ -264,7 +231,6 @@ function addAmmo(p, weapon, amount) {
   if (max <= 0) return false;
   const cur = p.ammo_amount[weapon] | 0;
   p.ammo_amount[weapon] = Math.min(max, cur + (amount | 0));
-  // GAME.CON always quikget after addammo — consume sprite even at max
   return true;
 }
 

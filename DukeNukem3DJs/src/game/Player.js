@@ -13,6 +13,17 @@ export class Player {
     this.horiz = 100;
     this.cursectnum = 0;
 
+    /** Hit points (PLAYER.C sprite.extra / ps.extra) */
+    this.extra = 100;
+    this.shield_amount = 0;
+    this.firstaid_amount = 0;
+    this.steroids_amount = 0;
+    this.jetpack_amount = 0;
+    this.scuba_amount = 0;
+    this.heat_amount = 0;
+    this.holoduke_amount = 0;
+    this.boot_amount = 0;
+
     this.posxv = 0;
     this.posyv = 0;
     this.poszv = 0;
@@ -71,6 +82,15 @@ export class Player {
     this.ang = cam.ang | 0;
     this.horiz = cam.horiz ?? 100;
     this.cursectnum = cam.cursectnum | 0;
+    this.extra = 100;
+    this.shield_amount = 0;
+    this.firstaid_amount = 0;
+    this.steroids_amount = 0;
+    this.jetpack_amount = 0;
+    this.scuba_amount = 0;
+    this.heat_amount = 0;
+    this.holoduke_amount = 0;
+    this.boot_amount = 0;
     this.posxv = 0;
     this.posyv = 0;
     this.poszv = 0;

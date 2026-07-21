@@ -310,7 +310,7 @@ Duke play loop      ██████░░░░   ~68%   pistol + doors 9/20�
 | Pistol | `game/Weapons.js`, `render/WeaponHud.js` | Kickback, shoot spark, bulletholes, FIRSTGUN HUD |
 | Doors | `game/Operate.js`, `Animate.js`, `Effectors.js`, `engine/NearTag.js` | USE (E), lotag 9/20–23/25/27 + SE 11/15/20 |
 | Transporters | `game/Transporters.js` | SE lotag 7 (E1L1 roof → street) |
-| Pickups | `game/Pickups.js` | Touch ammo/weapons; SP cull pal≠0; GAME.C sprite setup |
+| Pickups | `game/Pickups.js`, `SpawnSetup.js` | Weapons/ammo/health/inv; hide SE/MUSICANDSFX markers |
 | SEENINE / fan | `game/Seenines.js` | E1L1 roof explosives + FANSPRITE break + SE 13 |
 | Switches | `game/Switches.js` | `checkhitswitch` + `operateactivators` subset |
 | Look around | `platform/input/Keyboard.js` | WASD + turn + pointer-lock mouse look + LMB fire |
@@ -462,6 +462,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-21 | Touch pickups (AMMO/weapons) + SP pal≠0 cull; E1L1 roof exit is shaft fall not barrels |
 | 2026-07-21 | SEENINE explosives + FANSPRITE break (E1L1 roof); pickup foot-z dist + sprite setup |
 | 2026-07-21 | Fix hard-landing look (return_to_center); pointer-lock mouse look + R/F pitch |
+| 2026-07-21 | Spawn setup: hide system markers, fix item/maskwall sprites; expand health/inv pickups |
 
 ---
 
