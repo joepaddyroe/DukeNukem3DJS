@@ -2,14 +2,13 @@
 
 Canonical instructions for building and maintaining this port. **Read this file before making structural changes.** Update it when architecture, conventions, or port status change.
 
-### README sync (mandatory)
+### Documentation roles
 
-`PROJECT.md` is the **source of truth**. After any edit to this file, **immediately** copy the full contents into:
-
-1. `README.md` (this folder)
-2. `../README.md` (repo root)
-
-Keep both READMEs identical to this file except for a short sync-notice banner at the top of each README. Do this in the **same** change set — never leave PROJECT.md and README out of sync.
+| File | Role |
+|------|------|
+| **`PROJECT.md` (this file)** | Living source of truth — status, roadmap, conventions, changelog. **Update on every port milestone.** |
+| **`README.md`** | User-facing overview: what it is, how to run, folder layout. **Do not sync from this file.** Only edit README when something user-facing or structural changes drastically. |
+| **`../README.md`** | Short pointer at the repo root → `DukeNukem3DJs/`. |
 
 **Reference sources (read-only — never edit):**
 
@@ -51,7 +50,7 @@ If you are picking up this project with no chat history:
 3. Read **§13 Priority roadmap** — suggested order of work.
 4. Use **§14 Key file map** to jump to the right module.
 5. Respect **§2–3** (SOLID + layers) before editing.
-6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
+6. After completing work, update **§12**, **§7**, and **§15 Changelog** in this file. Leave `README.md` alone unless the change is drastic for end users.
 
 **Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (9/20–25/27) + **transporters (SE 7)** + **SEENINE/fan break** + **touch pickups** + **status bar / inventory** + **LIZTROOP/PIGCOP actors** + switches. 4:3 presentation.
 
@@ -215,7 +214,7 @@ Phase 0 only creates the shell folders and platform/app/core stubs.
 4. Design JS class/interface that preserves Build/Duke call shapes where practical (`setview`, `drawrooms`, `clipmove`, …)
 5. Port one vertical slice — line-faithful where math must match; leave documented approx only when blocked
 6. Verify against vanilla behaviour on a known map (e.g. `E1L1.MAP` from a legal GRP)
-7. Update **§7** checklist and **§12** port status in this file
+7. Update **§7** checklist and **§12** port status in **this file** (`PROJECT.md`)
 
 Do **not** bulk-translate entire `.c` files. One subsystem per change.  
 Do **not** copy DoomJS modules and “adapt” them — re-derive from the Duke/Build source.  
@@ -388,7 +387,7 @@ When working on DukeNukem3DJs:
 8. Do **not** modify `duke_nukem_3d-master/`
 9. Do **not** add npm/webpack unless the user requests it
 10. Update **§7**, **§12**, and **§15** when completing port milestones
-11. **Sync READMEs** whenever this file changes (`README.md` + `../README.md`)
+11. Do **not** mirror this file into `README.md` — README is overview/usage only; update it only for drastic user-facing or structural changes
 
 When unsure where code belongs: *Which Build/Duke module owns this data, and which interface should the rest of the engine use?*
 
@@ -431,7 +430,9 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-20 | Wallscan V shift + 4:3 present; APLAYER spawn + debug overlay |
 | 2026-07-20 | Flat textured floors/ceilings (`FlatPlane`); WASD/turn look; `updatesector` |
 | 2026-07-20 | Floor/ceil UV: world-space intersection (fixes rotate pinch) |
-| 2026-07-20 | Raised-crate floor bounds (exterior farthest-wall); face `drawmasks` subset |
+| 2026-07-21 | Face sprite U: linum>>16 (qinterpolatedown16); was >>24 so texX stuck at 0 → solid horizontal bands |
+| 2026-07-21 | Docs: README = overview/usage; PROJECT.md = living port guide (no more README mirror sync) |
+| 2026-07-21 | Face sprites: ENGINE mulscale14 size + maskwallscan V (`drawWallCol`); was zToScreen linear blit (squashed strips) |
 | 2026-07-20 | Wall-aligned floors (`stat&64`); `getzsofslope`; parallax LA sky (`parascan` subset) |
 | 2026-07-20 | Build portal para/void rules (no sky-tall abyss walls); wall-sprite fences; less shade bias |
 | 2026-07-20 | Sky fill no longer blacks outdoors; deferred sprites; slope step V + screen-space portal tests |

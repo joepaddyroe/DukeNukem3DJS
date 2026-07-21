@@ -20,6 +20,7 @@ import {
   mulscale14,
   mulscale15,
   mulscale16,
+  mulscale19,
   mulscale20,
   mulscale24,
   mulscale30,
@@ -29,6 +30,7 @@ import {
 import { APLAYER } from '../engine/SectorQuery.js';
 import { BUILD_ANGLE_MASK } from '../core/renderConstants.js';
 import { buildTables } from '../math/BuildTables.js';
+import { picsizAxisBits } from './ParallaxSky.js';
 
 /** Build rejects face sprites with yp <= 4<<8 (ENGINE.C drawmasks). */
 const MIN_SPRITE_YP = 4 << 8;
@@ -1185,9 +1187,11 @@ export class DrawMasks {
   }
 
   /**
-   * Face sprite ((cstat&48)==0) — ENGINE.C drawsprite.
-   * Vertical extent uses world height + zToScreen (same units as wall sprites).
-   * Horizontal extent uses ENGINE face xsiz (xrepeat × xyaspect × tilesizx).
+   * Face sprite ((cstat&48)==0) — ENGINE.C drawsprite ~3106–3264.
+   * Screen size: divscale19 / mulscale30 / mulscale14 (not zToScreen).
+   * Texel V: maskwallscan path (globalyscale + swall via drawWallCol).
+   * Clip: sprite y1/y2 + window only (startumost/startdmost). Skip sealed
+   * umost/dmost and flat mulscale24 sector slits (those crushed faces).
    * @param {import('./DrawRooms.js').DrawRooms} rooms
    * @param {import('../engine/Board.js').Sprite} spr
    * @param {number} xb
@@ -1195,8 +1199,7 @@ export class DrawMasks {
    */
   drawFaceSprite(rooms, spr, xb, yp) {
     const { buffer } = this.renderer;
-    const board = rooms.board;
-    if (!board) return;
+    if (!rooms.board) return;
     const tilenum = spr.picnum & 0xffff;
     this.art.loadtile(tilenum);
     const xspan = this.art.tilesizx[tilenum] | 0;
@@ -1207,100 +1210,121 @@ export class DrawMasks {
     const xdimen = buffer.xdimen;
     const ydimen = buffer.ydimen;
     const xyaspect = buffer.xyaspect ?? 65536;
-    const xrepeat = Math.max(1, spr.xrepeat | 0);
-    const yrepeat = Math.max(1, spr.yrepeat | 0);
+    const xrepeat = spr.xrepeat | 0;
+    const yrepeat = spr.yrepeat | 0;
+    if (xrepeat <= 0 || yrepeat <= 0) return;
 
     const siz = divscale(rooms.xdimenscale, yp, 19);
     if (siz <= 0) return;
 
-    // ENGINE.C horizontal size
+    // ENGINE.C: xv = mulscale16(xrepeat<<16, xyaspect)
     const xv = mulscale16(xrepeat << 16, xyaspect);
-    const xsiz = mulscale30(siz, Math.imul(xv | 0, xspan | 0));
-    if (xsiz <= 1) return;
-    if (xspan >> 11 >= xsiz) return;
+    const xsiz = mulscale30(siz, (xv * xspan) | 0);
+    const ysiz = mulscale14(siz, yrepeat * yspan);
+    // Watch out for divscale overflow
+    if ((xspan >> 11) >= xsiz || yspan >= (ysiz >> 1)) return;
+    if (xsiz <= 1 || ysiz <= 1) return;
 
     const picanm = this.art.picanm[tilenum] | 0;
     const xoff = ((picanm << 16) >> 24) + (spr.xoffset | 0);
     const yoff = ((picanm << 8) >> 24) + (spr.yoffset | 0);
+    const cstat = spr.cstat | 0;
 
     let x1 = xb - (xsiz >> 1);
     if (xspan & 1) x1 += mulscale31(siz, xv);
-    const iOff = mulscale30(siz, Math.imul(xv | 0, xoff | 0));
-    if ((spr.cstat & 4) === 0) x1 -= iOff;
+    const iOff = mulscale30(siz, (xv * xoff) | 0);
+    if ((cstat & 4) === 0) x1 -= iOff;
     else x1 += iOff;
-    const x2 = x1 + xsiz - 1;
 
-    // World Z span — same as wall sprites / ENGINE tsprite pre-pass
-    // yspan*yrepeat<<2 is sprite height in Build z units
+    // ENGINE.C face Y (8.8 fixed): feet at spr.z, height ysiz
+    let y1 = mulscale16((spr.z - rooms.posz) | 0, siz);
+    y1 = (y1 - mulscale14(siz, yrepeat * yoff)) | 0;
+    y1 = (y1 + (rooms.globalhoriz << 8) - ysiz) | 0;
+    if (cstat & 128) {
+      y1 = (y1 + (ysiz >> 1)) | 0;
+      if (yspan & 1) y1 = (y1 + mulscale15(siz, yrepeat)) | 0;
+    }
+    const y2 = (y1 + ysiz - 1) | 0;
+    if ((y1 | 255) >= (y2 | 255)) return;
+
+    let lx = (x1 >> 8) + 1;
+    let rx = (x1 + xsiz - 1) >> 8;
+    if (lx < 0) lx = 0;
+    if (rx >= xdimen) rx = xdimen - 1;
+    if (lx > rx) return;
+
+    let startum = y1 >> 8;
+    let startdm = y2 >> 8;
+    if (startum < 0) startum = 0;
+    if (startdm > ydimen) startdm = ydimen;
+    if (startum >= startdm) return;
+
+    const uwall = new Int16Array(xdimen);
+    const dwall = new Int16Array(xdimen);
+    // startumost/startdmost ≈ full window (sealed umost/dmost after walls
+    // would hide faces). smost portal clips TODO — prior smost port crushed.
+    for (let x = lx; x <= rx; x++) {
+      uwall[x] = startum;
+      dwall[x] = startdm;
+    }
+
+    // World Z for maskwallscan V (ENGINE.C after clip setup)
     let z2 = ((spr.z | 0) - ((yoff * yrepeat) << 2)) | 0;
-    if (spr.cstat & 128) {
+    if (cstat & 128) {
       z2 = (z2 + ((yspan * yrepeat) << 1)) | 0;
       if (yspan & 1) z2 = (z2 + (yrepeat << 1)) | 0;
     }
     const z1 = (z2 - ((yspan * yrepeat) << 2)) | 0;
 
-    // Project with zToScreen (owallmost-equivalent, includes z<<7)
-    let y1pix = rooms.zToScreen(z1 - rooms.posz, yp);
-    let y2pix = rooms.zToScreen(z2 - rooms.posz, yp);
-    if (y2pix < y1pix) {
-      const tmp = y1pix;
-      y1pix = y2pix;
-      y2pix = tmp;
+    let ybits = picsizAxisBits(yspan);
+    if ((1 << ybits) !== yspan) ybits++;
+    const globalshiftval = 32 - ybits;
+    let globalyscale = divscale(512, yrepeat, globalshiftval - 19);
+    let globalzd = (((rooms.posz - z1) * globalyscale) << 8) | 0;
+    if (cstat & 8) {
+      globalyscale = -globalyscale;
+      globalzd = (((rooms.posz - z2) * globalyscale) << 8) | 0;
     }
-    if (y2pix <= y1pix) return;
 
-    let lx = (x1 >> 8) + 1;
-    let rx = x2 >> 8;
-    if (lx < 0) lx = 0;
-    if (rx >= xdimen) rx = xdimen - 1;
-    if (lx > rx) return;
-
-    // Clip only to the sprite's own vertical span (not sealed umost/dmost,
-    // not flat sector floor/ceiling projections — those were crushing faces
-    // to 1–3px slits). Portal smost clips still TODO.
-    let yTop = y1pix;
-    let yBot = y2pix;
-    if (yTop < 0) yTop = 0;
-    if (yBot > ydimen) yBot = ydimen;
-    if (yTop >= yBot) return;
-
-    const mirrorX = (spr.cstat & 4) !== 0;
-    const mirrorY = (spr.cstat & 8) !== 0;
+    const swallVal = mulscale19(yp, rooms.xdimscale);
+    const mirrorX = (cstat & 4) !== 0;
     let linuminc = mirrorX
       ? -divscale(xspan, xsiz, 24)
       : divscale(xspan, xsiz, 24);
+    // ENGINE.C: linum = mulscale8(...); qinterpolatedown16 stores linum>>16 into lwall
     let linum = mirrorX
-      ? mulscale8((lx << 8) - x2, linuminc)
-      : mulscale8((lx << 8) - x1, linuminc);
+      ? mulscale8(((lx << 8) - (x1 + xsiz - 1)) | 0, linuminc)
+      : mulscale8(((lx << 8) - x1) | 0, linuminc);
 
     const shade = Math.min(
       this.renderer.palookup.numShades - 1,
       Math.max(0, spr.shade | 0),
     );
-    const shadeOff = this.renderer.palookup.shadeOffset(shade);
-    const tables = this.renderer.palookup.tables;
-    const { pixels, ylookup, windowx1, windowy1 } = buffer;
-    const texSpan = Math.max(1, yBot - yTop);
 
     for (let x = lx; x <= rx; x++) {
-      let texX = (linum / 0x1000000) | 0;
-      if (texX < 0) texX = 0;
-      if (texX >= xspan) texX = xspan - 1;
-      const col = this.art.getColumn(tilenum, texX);
-      if (col) {
-        const screenX = windowx1 + x;
-        for (let y = yTop; y < yBot; y++) {
-          let v = ((y - yTop) * yspan) / texSpan;
-          if (mirrorY) v = yspan - 1 - v;
-          let ty = v | 0;
-          if (ty < 0) ty = 0;
-          if (ty >= yspan) ty = yspan - 1;
-          const texel = col[ty] & 255;
-          if (texel === 255) continue;
-          pixels[ylookup[y + windowy1] + screenX] = tables[shadeOff + texel];
-        }
+      const u0 = uwall[x] | 0;
+      const u1 = dwall[x] | 0;
+      if (u1 > u0) {
+        // qinterpolatedown16: sar 16 — NOT >>24 (that stuck texX at 0 → solid bands)
+        let texX = linum >> 16;
+        if (texX < 0) texX = 0;
+        if (texX >= xspan) texX = xspan - 1;
+        rooms.drawWallCol(
+          x,
+          u0,
+          u1 - 1,
+          tilenum,
+          texX,
+          yspan,
+          shade,
+          swallVal,
+          globalyscale,
+          globalzd,
+          globalshiftval,
+          true,
+        );
       }
-      linum += linuminc;
+      linum = (linum + linuminc) | 0;
     }
   }
 }
