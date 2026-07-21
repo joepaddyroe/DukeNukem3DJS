@@ -6,6 +6,7 @@ import { HlineDrawer } from './HlineDrawer.js';
 import { DrawRooms } from './DrawRooms.js';
 import { DrawMasks } from './DrawMasks.js';
 import { drawWeaponHud } from './WeaponHud.js';
+import { drawStatusBar } from './StatusBar.js';
 
 /**
  * Software renderer facade — Build ENGINE.C pixel path + drawrooms.
@@ -106,5 +107,15 @@ export class SoftwareRenderer {
     const art = this.drawRooms?.art;
     if (!art || !tiles?.length) return;
     drawWeaponHud(this.buffer, art, tiles);
+  }
+
+  /**
+   * GAME.C displayrest status bar + inventory.
+   * @param {import('../game/Player.js').Player} player
+   */
+  drawStatusOverlay(player) {
+    const art = this.drawRooms?.art;
+    if (!art || !player) return;
+    drawStatusBar(this.buffer, art, player);
   }
 }

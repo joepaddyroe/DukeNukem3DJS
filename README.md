@@ -1,8 +1,7 @@
 # Duke Nukem Port � Project Guide
 
-> **README sync:** This file is the public mirror of [DukeNukem3DJs/PROJECT.md](./DukeNukem3DJs/PROJECT.md).  
+> **README sync:** This file is the public mirror of [DukeNukem3DJs/PROJECT.md](./DukeNukem3DJs/PROJECT.md).
 > **Agents:** whenever you change PROJECT.md, copy the full contents into DukeNukem3DJs/README.md and this root README.md in the same change � keep them identical aside from this notice block.
-# DukeNukem3DJs — Project Guide
 
 Canonical instructions for building and maintaining this port. **Read this file before making structural changes.** Update it when architecture, conventions, or port status change.
 
@@ -57,7 +56,7 @@ If you are picking up this project with no chat history:
 5. Respect **§2–3** (SOLID + layers) before editing.
 6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (9/20–25/27) + **transporters (SE 7)** + **SEENINE/fan break** + **touch pickups** + switches. 4:3 presentation.
+**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (9/20–25/27) + **transporters (SE 7)** + **SEENINE/fan break** + **touch pickups** + **status bar / inventory** + switches. 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -71,7 +70,7 @@ If you are picking up this project with no chat history:
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor (ceilsprite) + maskwalls |
 | **P2** | Player movement + `clipmove` | Partial — walls + sprite clips + getzrange/pushmove |
-| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/bridges/switches/pickups; no actors/CON |
+| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/bridges/switches/pickups/HUD; no actors/CON |
 
 ---
 
@@ -266,13 +265,13 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started
 - [x] Player spawn from board (APLAYER / map header)
 - [x] WASD + turn look
 - [x] `clipmove` / `getzrange` / movement
-- [~] Weapons, inventory, damage (Duke game) — pistol + touch pickups subset
+- [~] Weapons, inventory, damage (Duke game) — pistol + touch pickups + inventory strip
 - [ ] Actors (`ACTORS.C`), sector effects (`SECTOR.C`)
 - [ ] CON interpreter (`GAMEDEF.C`) as needed
 
 ### Phase 5 — UI / meta
 - [ ] Menus (`MENUES.C`)
-- [ ] HUD / status
+- [~] HUD / status — BOTTOMSTATUSBAR + digital nums + inventory icons
 - [ ] Level load flow (`PREMAP.C`)
 
 ### Phase 6 — Audio
@@ -297,7 +296,7 @@ Board load          ████████░░   ~85%   E1L1 + updatesector/
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
 Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
 drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceilsprite + maskwalls
-Duke play loop      ██████░░░░   ~68%   pistol + doors 9/20–25/27 + switches + pickups; no actors/CON
+Duke play loop      ███████░░░   ~72%   pistol + doors + pickups + status bar; no actors/CON
 ```
 
 ### 12.2 Done well
@@ -314,7 +313,8 @@ Duke play loop      ██████░░░░   ~68%   pistol + doors 9/20�
 | Pistol | `game/Weapons.js`, `render/WeaponHud.js` | Kickback, shoot spark, bulletholes, FIRSTGUN HUD |
 | Doors | `game/Operate.js`, `Animate.js`, `Effectors.js`, `engine/NearTag.js` | USE (E), lotag 9/20–23/25/27 + SE 11/15/20 |
 | Transporters | `game/Transporters.js` | SE lotag 7 (E1L1 roof → street) |
-| Pickups | `game/Pickups.js`, `SpawnSetup.js` | Weapons/ammo/health/inv; hide SE/MUSICANDSFX markers |
+| Pickups | `game/Pickups.js`, `SpawnSetup.js` | Weapons/ammo/health/inv; floor snap; access-card pal; hide SE markers |
+| Status bar | `render/StatusBar.js`, `WeaponHud.js` | BOTTOMSTATUSBAR + ammo/HP/armor + inventory `[`/`]` |
 | SEENINE / fan | `game/Seenines.js` | E1L1 roof explosives + FANSPRITE break + SE 13 |
 | Switches | `game/Switches.js` | `checkhitswitch` + `operateactivators` subset |
 | Look around | `platform/input/Keyboard.js` | WASD + turn + pointer-lock mouse look + LMB fire |
@@ -352,7 +352,8 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | Duke play tic (jump/crouch/gravity) | `game/ProcessInput.js`, `game/Player.js`, `app/Game.js` |
 | Pistol / hitscan | `game/Weapons.js`, `engine/Hitscan.js`, `render/WeaponHud.js` |
 | Doors / USE / switches | `game/Operate.js`, `Animate.js`, `Effectors.js`, `Switches.js`, `Premap.js`, `engine/NearTag.js`, `WallGeom.js` |
-| Touch pickups | `game/Pickups.js` · GAME.CON / GAME.C spawn |
+| Touch pickups | `game/Pickups.js`, `SpawnSetup.js` · GAME.CON / GAME.C spawn |
+| Status bar / inventory | `render/StatusBar.js` · GAME.C displayrest |
 | SEENINE / fan break | `game/Seenines.js` · ACTORS.C / SECTOR.C |
 | Wire startup | `main.js` |
 | Screen size constants | `core/renderConstants.js` |
@@ -467,6 +468,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-21 | SEENINE explosives + FANSPRITE break (E1L1 roof); pickup foot-z dist + sprite setup |
 | 2026-07-21 | Fix hard-landing look (return_to_center); pointer-lock mouse look + R/F pitch |
 | 2026-07-21 | Spawn setup: hide system markers, fix item/maskwall sprites; expand health/inv pickups |
+| 2026-07-21 | Status bar + inventory HUD; pickup floor snap; start ammo 48; `[`/`]` inventory cycle |
 
 ---
 

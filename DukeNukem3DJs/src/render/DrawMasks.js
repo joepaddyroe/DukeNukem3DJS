@@ -167,9 +167,10 @@ export class DrawMasks {
 
       const dx = spr.x - rooms.posx;
       const dy = spr.y - rooms.posy;
+      // Face sprites: keep if in front (fixed-point), matching flush yp test
       if (kindBits === 0) {
-        const forward = dx * rooms.cos + dy * rooms.sin;
-        if (!(forward > 0)) continue;
+        const ypApprox = dmulscale6(dx, rooms.cosVR, dy, rooms.sinVR);
+        if (ypApprox <= 0) continue;
       }
 
       this._drawn.add(i);

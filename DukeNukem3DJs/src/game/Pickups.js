@@ -1,6 +1,5 @@
 /**
- * GAME.CON touch-pickups subset (ifpdistl RETRIEVEDISTANCE) — no CON VM yet.
- * C / CON refs: GAME.CON actor AMMO / SHOTGUNSPRITE / SIXPAK / …; GAME.C spawn.
+ * GAME.CON touch-pickups — weapons, ammo, health, inventory.
  */
 import {
   ACCESSCARD,
@@ -40,7 +39,6 @@ import { EYEHEIGHT } from '../engine/SectorQuery.js';
 /** USER.CON RETRIEVEDISTANCE */
 export const RETRIEVEDISTANCE = 844;
 
-/** USER.CON amounts */
 const PISTOLAMMOAMOUNT = 12;
 const SHOTGUNAMMOAMOUNT = 10;
 const CHAINGUNAMMOAMOUNT = 50;
@@ -51,7 +49,6 @@ const DEVISTATORAMMOAMOUNT = 15;
 const FREEZEAMMOAMOUNT = 25;
 const HANDBOMBBOX = 5;
 
-/** DUKE3D.H weapon indices */
 export const PISTOL_WEAPON = 1;
 export const SHOTGUN_WEAPON = 2;
 export const CHAINGUN_WEAPON = 3;
@@ -59,9 +56,10 @@ export const RPG_WEAPON = 4;
 export const HANDBOMB_WEAPON = 5;
 export const SHRINKER_WEAPON = 6;
 export const DEVISTATOR_WEAPON = 7;
+export const TRIPBOMB_WEAPON = 8;
 export const FREEZE_WEAPON = 10;
 
-const MAX_AMMO = [0, 200, 50, 200, 50, 50, 50, 99, 0, 0, 99, 0];
+const MAX_AMMO = [0, 200, 50, 200, 50, 50, 50, 99, 10, 0, 99, 0];
 const MAX_PLAYER_HEALTH = 100;
 const MAX_ARMOUR = 100;
 
@@ -75,14 +73,16 @@ function hideSprite(sp) {
 }
 
 /**
- * Touch pickups near the player (GAME.CON ifpdistl path).
  * @param {import('../engine/Board.js').Board} board
  * @param {import('./Player.js').Player} p
+ * @param {import('../platform/input/Keyboard.js').Keyboard|null} [kb]
  */
-export function processPickups(board, p) {
+export function processPickups(board, p, kb = null) {
   if (!board || p.cursectnum < 0) return;
 
   ensureInv(p);
+  if ((p.invdisptime | 0) > 0) p.invdisptime--;
+  if (kb) cycleInventory(p, kb);
 
   for (let i = 0; i < board.numsprites; i++) {
     const sp = board.sprites[i];
@@ -92,17 +92,19 @@ export function processPickups(board, p) {
     const pic = sp.picnum & 0xffff;
     if (!isItemPic(pic)) continue;
 
+    // SECTOR.C ldist (2D) + small z gate — more reliable than full 3D eye dist
     const dx = (sp.x | 0) - (p.posx | 0);
     const dy = (sp.y | 0) - (p.posy | 0);
-    const footZ = ((p.posz | 0) + EYEHEIGHT) | 0;
-    const vz = (footZ - (sp.z | 0)) >> 4;
-    const dist = nsqrtasm(
-      Math.imul(dx, dx) + Math.imul(dy, dy) + Math.imul(vz, vz),
-    );
+    const dist = (nsqrtasm(Math.imul(dx, dx) + Math.imul(dy, dy)) + 1) | 0;
     if (dist >= RETRIEVEDISTANCE) continue;
 
-    if (tryTake(p, pic)) {
+    const footZ = ((p.posz | 0) + EYEHEIGHT) | 0;
+    const dz = (sp.z | 0) - footZ;
+    if (dz > (48 << 8) || dz < -(64 << 8)) continue;
+
+    if (tryTake(p, pic, sp)) {
       hideSprite(sp);
+      p.last_extra = p.extra | 0;
       p.lastUse = `got ${pic}`;
     }
   }
@@ -113,6 +115,7 @@ export function processPickups(board, p) {
  */
 function ensureInv(p) {
   if (p.extra == null) p.extra = MAX_PLAYER_HEALTH;
+  if (p.last_extra == null) p.last_extra = p.extra;
   if (p.shield_amount == null) p.shield_amount = 0;
   if (p.firstaid_amount == null) p.firstaid_amount = 0;
   if (p.steroids_amount == null) p.steroids_amount = 0;
@@ -121,6 +124,9 @@ function ensureInv(p) {
   if (p.heat_amount == null) p.heat_amount = 0;
   if (p.holoduke_amount == null) p.holoduke_amount = 0;
   if (p.boot_amount == null) p.boot_amount = 0;
+  if (p.inven_icon == null) p.inven_icon = 0;
+  if (p.invdisptime == null) p.invdisptime = 0;
+  if (p.got_access == null) p.got_access = 0;
   p.ammo_amount = p.ammo_amount || [];
   p.gotweapon = p.gotweapon || [];
   for (let i = 0; i < 12; i++) {
@@ -130,11 +136,60 @@ function ensureInv(p) {
 }
 
 /**
+ * SECTOR.C inventory cycle — [ / ]
+ * @param {import('./Player.js').Player} p
+ * @param {import('../platform/input/Keyboard.js').Keyboard} kb
+ */
+function cycleInventory(p, kb) {
+  const next = kb.wasPressed('BracketRight');
+  const prev = kb.wasPressed('BracketLeft');
+  if (!next && !prev) return;
+
+  /** @type {number[]} */
+  const bits = [];
+  if ((p.firstaid_amount | 0) > 0) bits.push(1);
+  if ((p.steroids_amount | 0) > 0) bits.push(2);
+  if ((p.holoduke_amount | 0) > 0) bits.push(3);
+  if ((p.jetpack_amount | 0) > 0) bits.push(4);
+  if ((p.heat_amount | 0) > 0) bits.push(5);
+  if ((p.scuba_amount | 0) > 0) bits.push(6);
+  if ((p.boot_amount | 0) > 0) bits.push(7);
+  if (!bits.length) return;
+
+  p.invdisptime = 52;
+  let idx = bits.indexOf(p.inven_icon | 0);
+  if (idx < 0) idx = next ? -1 : 0;
+  if (next) idx = (idx + 1) % bits.length;
+  else idx = (idx - 1 + bits.length) % bits.length;
+  p.inven_icon = bits[idx];
+}
+
+/**
+ * @param {import('./Player.js').Player} p
+ * @param {number} icon
+ */
+function setInven(p, icon) {
+  p.inven_icon = icon | 0;
+  p.invdisptime = 40;
+}
+
+/**
+ * @param {import('./Player.js').Player} p
+ * @param {number} weapon
+ */
+function selectWeapon(p, weapon) {
+  p.gotweapon[weapon] = 1;
+  p.curr_weapon = weapon | 0;
+  p.weapon_pos = -9;
+  p.kickback_pic = 0;
+}
+
+/**
  * @param {import('./Player.js').Player} p
  * @param {number} pic
- * @returns {boolean}
+ * @param {import('../engine/Board.js').Sprite} [sp]
  */
-function tryTake(p, pic) {
+function tryTake(p, pic, sp) {
   switch (pic) {
     case AMMO:
       return addAmmo(p, PISTOL_WEAPON, PISTOLAMMOAMOUNT);
@@ -146,8 +201,11 @@ function tryTake(p, pic) {
       return addAmmo(p, CHAINGUN_WEAPON, CHAINGUNAMMOAMOUNT);
     case RPGAMMO:
       return addAmmo(p, RPG_WEAPON, RPGAMMOBOX);
-    case HBOMBAMMO:
-      return addWeapon(p, HANDBOMB_WEAPON, HANDBOMBBOX);
+    case HBOMBAMMO: {
+      if (!addAmmo(p, HANDBOMB_WEAPON, HANDBOMBBOX)) return false;
+      selectWeapon(p, HANDBOMB_WEAPON);
+      return true;
+    }
     case CRYSTALAMMO:
       return addAmmo(p, SHRINKER_WEAPON, CRYSTALAMMOAMOUNT);
     case GROWAMMO:
@@ -156,20 +214,41 @@ function tryTake(p, pic) {
       return addAmmo(p, DEVISTATOR_WEAPON, DEVISTATORAMMOAMOUNT);
     case FREEZEAMMO:
       return addAmmo(p, FREEZE_WEAPON, FREEZEAMMOAMOUNT);
-    case FIRSTGUNSPRITE:
-      return addWeapon(p, PISTOL_WEAPON, 48);
-    case SHOTGUNSPRITE:
-      return addWeapon(p, SHOTGUN_WEAPON, SHOTGUNAMMOAMOUNT);
-    case CHAINGUNSPRITE:
-      return addWeapon(p, CHAINGUN_WEAPON, 50);
-    case RPGSPRITE:
-      return addWeapon(p, RPG_WEAPON, RPGAMMOBOX);
-    case SHRINKERSPRITE:
-      return addWeapon(p, SHRINKER_WEAPON, 10);
-    case FREEZESPRITE:
-      return addWeapon(p, FREEZE_WEAPON, FREEZEAMMOAMOUNT);
-    case DEVISTATORSPRITE:
-      return addWeapon(p, DEVISTATOR_WEAPON, DEVISTATORAMMOAMOUNT);
+    case FIRSTGUNSPRITE: {
+      if (!addAmmo(p, PISTOL_WEAPON, 48)) return false;
+      selectWeapon(p, PISTOL_WEAPON);
+      return true;
+    }
+    case SHOTGUNSPRITE: {
+      if (!addAmmo(p, SHOTGUN_WEAPON, SHOTGUNAMMOAMOUNT)) return false;
+      selectWeapon(p, SHOTGUN_WEAPON);
+      return true;
+    }
+    case CHAINGUNSPRITE: {
+      if (!addAmmo(p, CHAINGUN_WEAPON, 50)) return false;
+      selectWeapon(p, CHAINGUN_WEAPON);
+      return true;
+    }
+    case RPGSPRITE: {
+      if (!addAmmo(p, RPG_WEAPON, RPGAMMOBOX)) return false;
+      selectWeapon(p, RPG_WEAPON);
+      return true;
+    }
+    case SHRINKERSPRITE: {
+      if (!addAmmo(p, SHRINKER_WEAPON, 10)) return false;
+      selectWeapon(p, SHRINKER_WEAPON);
+      return true;
+    }
+    case FREEZESPRITE: {
+      if (!addAmmo(p, FREEZE_WEAPON, FREEZEAMMOAMOUNT)) return false;
+      selectWeapon(p, FREEZE_WEAPON);
+      return true;
+    }
+    case DEVISTATORSPRITE: {
+      if (!addAmmo(p, DEVISTATOR_WEAPON, DEVISTATORAMMOAMOUNT)) return false;
+      selectWeapon(p, DEVISTATOR_WEAPON);
+      return true;
+    }
     case COLA:
       return addHealth(p, 10);
     case SIXPAK:
@@ -179,32 +258,46 @@ function tryTake(p, pic) {
     case FIRSTAID:
       if ((p.firstaid_amount | 0) >= 100) return false;
       p.firstaid_amount = 100;
+      setInven(p, 1);
       return true;
-    case SHIELD:
+    case SHIELD: {
       if ((p.shield_amount | 0) >= MAX_ARMOUR) return false;
       p.shield_amount = Math.min(MAX_ARMOUR, (p.shield_amount | 0) + 50);
       return true;
+    }
     case STEROIDS:
       p.steroids_amount = 400;
+      setInven(p, 2);
       return true;
     case AIRTANK:
       p.scuba_amount = 6400;
+      setInven(p, 6);
       return true;
     case JETPACK:
       p.jetpack_amount = 1600;
+      setInven(p, 4);
       return true;
     case HEATSENSOR:
       p.heat_amount = 1200;
+      setInven(p, 5);
       return true;
     case HOLODUKE:
       p.holoduke_amount = 2400;
+      setInven(p, 3);
       return true;
     case BOOTS:
       p.boot_amount = 200;
+      setInven(p, 7);
       return true;
-    case ACCESSCARD:
-      p.lastUse = 'access card';
+    case ACCESSCARD: {
+      const pal = (sp?.pal | 0) & 0xff;
+      let bit = 1;
+      if (pal === 21) bit = 2;
+      else if (pal === 23) bit = 4;
+      if ((p.got_access | 0) & bit) return false;
+      p.got_access = (p.got_access | bit) | 0;
       return true;
+    }
     default:
       return false;
   }
@@ -218,6 +311,7 @@ function addHealth(p, amount) {
   const cur = p.extra | 0;
   if (cur >= MAX_PLAYER_HEALTH) return false;
   p.extra = Math.min(MAX_PLAYER_HEALTH, cur + (amount | 0));
+  p.last_extra = p.extra;
   return true;
 }
 
@@ -230,17 +324,8 @@ function addAmmo(p, weapon, amount) {
   const max = MAX_AMMO[weapon] | 0;
   if (max <= 0) return false;
   const cur = p.ammo_amount[weapon] | 0;
+  if (cur >= max) return false;
   p.ammo_amount[weapon] = Math.min(max, cur + (amount | 0));
-  return true;
-}
-
-/**
- * @param {import('./Player.js').Player} p
- * @param {number} weapon
- * @param {number} amount
- */
-function addWeapon(p, weapon, amount) {
   p.gotweapon[weapon] = 1;
-  addAmmo(p, weapon, amount);
   return true;
 }

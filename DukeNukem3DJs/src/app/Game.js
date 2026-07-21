@@ -75,7 +75,7 @@ export class Game {
     processInput(this.player, rooms.board, rooms.art, sync);
     processWeapon(this.player, rooms.board, rooms.art, sync);
     processUse(this.player, rooms.board, rooms.art, sync);
-    processPickups(rooms.board, this.player);
+    processPickups(rooms.board, this.player, kb);
     doAnimations(rooms.board, this.player);
     moveEffectors(rooms.board, this.player);
     processSeenines(rooms.board);
@@ -102,6 +102,7 @@ export class Game {
     const rooms = this.renderer.drawRooms;
     if (rooms?.art) {
       this.renderer.drawWeaponOverlay(pistolHudTiles(this.player));
+      this.renderer.drawStatusOverlay(this.player);
     }
     this.output.present(this.renderer.pixels);
   }

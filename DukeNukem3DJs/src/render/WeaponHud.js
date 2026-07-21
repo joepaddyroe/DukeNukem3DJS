@@ -12,6 +12,40 @@ function s8(b) {
 }
 
 /**
+ * Top-left blit (status bar backdrop, icons).
+ * @param {import('./ViewBuffer.js').ViewBuffer} buffer
+ * @param {import('../grp/ArtTiles.js').ArtTiles} art
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} tilenum
+ */
+export function blitTile(buffer, art, x0, y0, tilenum) {
+  const pixels = art.loadtile(tilenum);
+  if (!pixels) return;
+  const xsiz = art.tilesizx[tilenum] | 0;
+  const ysiz = art.tilesizy[tilenum] | 0;
+  if (xsiz <= 0 || ysiz <= 0) return;
+
+  const { pixels: dest, ylookup, windowx1, windowx2, windowy1, windowy2 } =
+    buffer;
+  const ox = x0 | 0;
+  const oy = y0 | 0;
+
+  for (let x = 0; x < xsiz; x++) {
+    const sx = (ox + x) | 0;
+    if (sx < windowx1 || sx > windowx2) continue;
+    const col = pixels.subarray(x * ysiz, x * ysiz + ysiz);
+    for (let y = 0; y < ysiz; y++) {
+      const sy = (oy + y) | 0;
+      if (sy < windowy1 || sy > windowy2) continue;
+      const c = col[y];
+      if (c === 255) continue;
+      dest[ylookup[sy] + sx] = c;
+    }
+  }
+}
+
+/**
  * @param {import('./ViewBuffer.js').ViewBuffer} buffer
  * @param {import('../grp/ArtTiles.js').ArtTiles} art
  * @param {number} cx 320×200 screen x (rotatesprite pivot)
@@ -25,28 +59,36 @@ export function blitTileCentered(buffer, art, cx, cy, tilenum) {
   const ysiz = art.tilesizy[tilenum] | 0;
   if (xsiz <= 0 || ysiz <= 0) return;
 
-  // dorotatesprite (dastat&16 clear): pivot = picanm offset + half tile
   const picanm = art.picanm[tilenum] | 0;
   const xoff = (s8((picanm >> 8) & 255) + (xsiz >> 1)) | 0;
   const yoff = (s8((picanm >> 16) & 255) + (ysiz >> 1)) | 0;
 
-  // Full-screen 320×200: dorotatesprite dastat&2 scale is identity
-  const x0 = (cx - xoff) | 0;
-  const y0 = (cy - yoff) | 0;
-  const { pixels: dest, ylookup, windowx1, windowx2, windowy1, windowy2 } =
-    buffer;
+  blitTile(buffer, art, (cx - xoff) | 0, (cy - yoff) | 0, tilenum);
+}
 
-  for (let x = 0; x < xsiz; x++) {
-    const sx = (x0 + x) | 0;
-    if (sx < windowx1 || sx > windowx2) continue;
-    const col = pixels.subarray(x * ysiz, x * ysiz + ysiz);
-    for (let y = 0; y < ysiz; y++) {
-      const sy = (y0 + y) | 0;
-      if (sy < windowy1 || sy > windowy2) continue;
-      const c = col[y];
-      if (c === 255) continue;
-      dest[ylookup[sy] + sx] = c;
-    }
+/**
+ * GAME.C digitalnumber — centered digit string using DIGITALNUM tiles.
+ * @param {import('./ViewBuffer.js').ViewBuffer} buffer
+ * @param {import('../grp/ArtTiles.js').ArtTiles} art
+ * @param {number} x center x
+ * @param {number} y top y
+ * @param {number} n
+ * @param {number} digitalBase DIGITALNUM
+ */
+export function digitalNumber(buffer, art, x, y, n, digitalBase) {
+  let v = n | 0;
+  if (v < 0) v = 0;
+  const digits = String(v);
+  let width = 0;
+  for (let k = 0; k < digits.length; k++) {
+    const p = (digitalBase | 0) + (digits.charCodeAt(k) - 48);
+    width += (art.tilesizx[p] | 0) + 1;
+  }
+  let c = (x | 0) - (width >> 1);
+  for (let k = 0; k < digits.length; k++) {
+    const p = (digitalBase | 0) + (digits.charCodeAt(k) - 48);
+    blitTile(buffer, art, c, y | 0, p);
+    c += (art.tilesizx[p] | 0) + 1;
   }
 }
 

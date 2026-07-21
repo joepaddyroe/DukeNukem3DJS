@@ -37,6 +37,10 @@ import {
   STEROIDS,
   TRIPBOMBSPRITE,
 } from './Names.js';
+import { getzsofslope } from '../engine/SectorQuery.js';
+
+/** GAME.C / DUKE3D.H — resting sprite offset above floor */
+const FOURSLEIGHT = 1 << 8;
 
 /** NAMES.H MASKWALL1..15 */
 const MASKWALL1 = 912;
@@ -135,29 +139,35 @@ export function applySpawnSetup(board) {
 
     if (!isItemPic(pic)) continue;
 
-    // SP skill / multiplayer palette cull
-    if ((sp.pal | 0) !== 0) {
+    // SP skill / multiplayer palette cull (GAME.C) — ACCESSCARD keeps pal for key color
+    if (pic !== ACCESSCARD && (sp.pal | 0) !== 0) {
       hideSprite(sp);
       continue;
     }
 
-    sp.pal = 0;
+    if (pic !== ACCESSCARD) sp.pal = 0;
     sp.shade = -17;
     sp.owner = i;
+    sp.cstat = 0;
 
     if (pic === ATOMICHEALTH) {
       sp.cstat = (sp.cstat | 128) | 0;
       sp.xrepeat = 32;
       sp.yrepeat = 32;
     } else if (pic === AMMO) {
-      sp.cstat = 0;
       sp.xrepeat = 16;
       sp.yrepeat = 16;
     } else {
       // Clear blocking / wall bits — face pickup
-      sp.cstat = 0;
       sp.xrepeat = 32;
       sp.yrepeat = 32;
+    }
+
+    // GAME.C makeitfall resting pose — sprite z on sector floor
+    const sec = board.sectors[sp.sectnum];
+    if (sec) {
+      const florz = getzsofslope(board, sp.sectnum, sp.x | 0, sp.y | 0).florz | 0;
+      sp.z = (florz - FOURSLEIGHT) | 0;
     }
   }
 }

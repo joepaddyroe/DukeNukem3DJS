@@ -27,7 +27,7 @@ export function initPistol(p) {
   for (let i = 0; i < 12; i++) {
     if (p.ammo_amount[i] == null) p.ammo_amount[i] = 0;
   }
-  p.ammo_amount[PISTOL_WEAPON] = 200;
+  p.ammo_amount[PISTOL_WEAPON] = 48;
   p.gotweapon = p.gotweapon || [];
   p.gotweapon[PISTOL_WEAPON] = 1;
   /** @type {{ index: number, life: number }[]} */
@@ -239,6 +239,8 @@ export function pistolHudTiles(p) {
   const weaponXOffset = displayWeaponXOffset(p);
   const lookingArc = ((p.look_ang | 0) < 0 ? -(p.look_ang | 0) : (p.look_ang | 0)) / 9 | 0;
   const look = (p.look_ang | 0) >> 1;
+  // Raise gun ~10% of 200-tall screen (status bar sits lower than vanilla view crop)
+  const yLift = 20;
   /** @type {{ pic: number, x: number, y: number }[]} */
   const out = [];
 
@@ -315,5 +317,6 @@ export function pistolHudTiles(p) {
     });
   }
 
+  for (let i = 0; i < out.length; i++) out[i].y -= yLift;
   return out;
 }
