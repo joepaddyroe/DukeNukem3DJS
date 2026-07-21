@@ -1186,6 +1186,8 @@ export class DrawMasks {
 
   /**
    * Face sprite ((cstat&48)==0) — ENGINE.C drawsprite.
+   * Vertical extent uses world height + zToScreen (same units as wall sprites).
+   * Horizontal extent uses ENGINE face xsiz (xrepeat × xyaspect × tilesizx).
    * @param {import('./DrawRooms.js').DrawRooms} rooms
    * @param {import('../engine/Board.js').Sprite} spr
    * @param {number} xb
@@ -1205,16 +1207,17 @@ export class DrawMasks {
     const xdimen = buffer.xdimen;
     const ydimen = buffer.ydimen;
     const xyaspect = buffer.xyaspect ?? 65536;
+    const xrepeat = Math.max(1, spr.xrepeat | 0);
+    const yrepeat = Math.max(1, spr.yrepeat | 0);
 
     const siz = divscale(rooms.xdimenscale, yp, 19);
     if (siz <= 0) return;
 
-    // ENGINE.C: xv = mulscale16(xrepeat<<16, xyaspect); use int32 products
-    const xv = mulscale16((spr.xrepeat | 0) << 16, xyaspect);
+    // ENGINE.C horizontal size
+    const xv = mulscale16(xrepeat << 16, xyaspect);
     const xsiz = mulscale30(siz, Math.imul(xv | 0, xspan | 0));
-    const ysiz = mulscale14(siz, Math.imul(spr.yrepeat | 0, yspan | 0));
-    if (xsiz <= 1 || ysiz <= 1) return;
-    if (xspan >> 11 >= xsiz || yspan >= ysiz >> 1) return;
+    if (xsiz <= 1) return;
+    if (xspan >> 11 >= xsiz) return;
 
     const picanm = this.art.picanm[tilenum] | 0;
     const xoff = ((picanm << 16) >> 24) + (spr.xoffset | 0);
@@ -1225,18 +1228,26 @@ export class DrawMasks {
     const iOff = mulscale30(siz, Math.imul(xv | 0, xoff | 0));
     if ((spr.cstat & 4) === 0) x1 -= iOff;
     else x1 += iOff;
-
-    let y1 = mulscale16(spr.z - rooms.posz, siz);
-    y1 -= mulscale14(siz, Math.imul(spr.yrepeat | 0, yoff | 0));
-    y1 += (rooms.globalhoriz << 8) - ysiz;
-    if (spr.cstat & 128) {
-      y1 += ysiz >> 1;
-      if (yspan & 1) y1 += mulscale15(siz, spr.yrepeat);
-    }
-
     const x2 = x1 + xsiz - 1;
-    const y2 = y1 + ysiz - 1;
-    if ((y1 | 255) >= (y2 | 255)) return;
+
+    // World Z span — same as wall sprites / ENGINE tsprite pre-pass
+    // yspan*yrepeat<<2 is sprite height in Build z units
+    let z2 = ((spr.z | 0) - ((yoff * yrepeat) << 2)) | 0;
+    if (spr.cstat & 128) {
+      z2 = (z2 + ((yspan * yrepeat) << 1)) | 0;
+      if (yspan & 1) z2 = (z2 + (yrepeat << 1)) | 0;
+    }
+    const z1 = (z2 - ((yspan * yrepeat) << 2)) | 0;
+
+    // Project with zToScreen (owallmost-equivalent, includes z<<7)
+    let y1pix = rooms.zToScreen(z1 - rooms.posz, yp);
+    let y2pix = rooms.zToScreen(z2 - rooms.posz, yp);
+    if (y2pix < y1pix) {
+      const tmp = y1pix;
+      y1pix = y2pix;
+      y2pix = tmp;
+    }
+    if (y2pix <= y1pix) return;
 
     let lx = (x1 >> 8) + 1;
     let rx = x2 >> 8;
@@ -1244,42 +1255,14 @@ export class DrawMasks {
     if (rx >= xdimen) rx = xdimen - 1;
     if (lx > rx) return;
 
-    const sec = board.sectors[spr.sectnum];
-    let startum = 0;
-    let startdm = 0x7fffffff;
-    if (sec) {
-      if ((sec.ceilingstat & 3) === 0) {
-        startum =
-          rooms.globalhoriz +
-          mulscale24(siz, sec.ceilingz - rooms.posz) -
-          1;
-      }
-      if ((sec.floorstat & 3) === 0) {
-        startdm =
-          rooms.globalhoriz + mulscale24(siz, sec.floorz - rooms.posz) + 1;
-      }
-    }
-    if (y1 >> 8 > startum) startum = y1 >> 8;
-    if (y2 >> 8 < startdm) startdm = y2 >> 8;
-    if (startum < -32768) startum = -32768;
-    if (startdm > 32767) startdm = 32767;
-    if (startum >= startdm) return;
-
-    const uwall = new Int16Array(xdimen);
-    const dwall = new Int16Array(xdimen);
-    // ENGINE.C uses startumost/startdmost (window bounds), NOT the sealed
-    // umost/dmost after drawalls — clipping to live umost/dmost at flush
-    // makes every face sprite invisible. Use sector startum/startdm + view.
-    for (let x = lx; x <= rx; x++) {
-      let u = startum | 0;
-      let d = startdm | 0;
-      if (u < 0) u = 0;
-      if (d > ydimen) d = ydimen;
-      uwall[x] = u;
-      dwall[x] = d;
-    }
-    // smost portal clips still incomplete (were collapsing sprites to slits);
-    // skip until spritewallfront / smost ordering matches ENGINE.
+    // Clip only to the sprite's own vertical span (not sealed umost/dmost,
+    // not flat sector floor/ceiling projections — those were crushing faces
+    // to 1–3px slits). Portal smost clips still TODO.
+    let yTop = y1pix;
+    let yBot = y2pix;
+    if (yTop < 0) yTop = 0;
+    if (yBot > ydimen) yBot = ydimen;
+    if (yTop >= yBot) return;
 
     const mirrorX = (spr.cstat & 4) !== 0;
     const mirrorY = (spr.cstat & 8) !== 0;
@@ -1290,17 +1273,6 @@ export class DrawMasks {
       ? mulscale8((lx << 8) - x2, linuminc)
       : mulscale8((lx << 8) - x1, linuminc);
 
-    let yTop = y1;
-    let yBot = y2;
-    let yspanDraw = yspan;
-    let yIncSign = 1;
-    if (mirrorY) {
-      yIncSign = -1;
-      const tmp = yTop;
-      yTop = yBot;
-      yBot = tmp;
-    }
-
     const shade = Math.min(
       this.renderer.palookup.numShades - 1,
       Math.max(0, spr.shade | 0),
@@ -1308,28 +1280,24 @@ export class DrawMasks {
     const shadeOff = this.renderer.palookup.shadeOffset(shade);
     const tables = this.renderer.palookup.tables;
     const { pixels, ylookup, windowx1, windowy1 } = buffer;
+    const texSpan = Math.max(1, yBot - yTop);
 
     for (let x = lx; x <= rx; x++) {
-      const u0 = Math.max(uwall[x], Math.min(yTop, yBot) >> 8);
-      const u1 = Math.min(dwall[x], (Math.max(yTop, yBot) >> 8) + 1);
-      if (u1 > u0) {
-        let texX = (linum / 0x1000000) | 0;
-        if (texX < 0) texX = 0;
-        if (texX >= xspan) texX = xspan - 1;
-        const col = this.art.getColumn(tilenum, texX);
-        if (col) {
-          const screenX = windowx1 + x;
-          const ysizPix = ysiz;
-          for (let y = u0; y < u1; y++) {
-            let v = (((y << 8) - y1) * yspanDraw) / ysizPix;
-            if (yIncSign < 0) v = yspan - 1 - v;
-            let ty = v | 0;
-            if (ty < 0) ty = 0;
-            if (ty >= yspan) ty = yspan - 1;
-            const texel = col[ty] & 255;
-            if (texel === 255) continue;
-            pixels[ylookup[y + windowy1] + screenX] = tables[shadeOff + texel];
-          }
+      let texX = (linum / 0x1000000) | 0;
+      if (texX < 0) texX = 0;
+      if (texX >= xspan) texX = xspan - 1;
+      const col = this.art.getColumn(tilenum, texX);
+      if (col) {
+        const screenX = windowx1 + x;
+        for (let y = yTop; y < yBot; y++) {
+          let v = ((y - yTop) * yspan) / texSpan;
+          if (mirrorY) v = yspan - 1 - v;
+          let ty = v | 0;
+          if (ty < 0) ty = 0;
+          if (ty >= yspan) ty = yspan - 1;
+          const texel = col[ty] & 255;
+          if (texel === 255) continue;
+          pixels[ylookup[y + windowy1] + screenX] = tables[shadeOff + texel];
         }
       }
       linum += linuminc;
