@@ -1,6 +1,9 @@
 /**
  * PREMAP.C sector.extra defaults + GPSPEED application.
+ * Also GAME.C spawn skill cull for pal≠0 pickups (via Pickups.js).
  */
+import { cullMultiplayerPickups } from './Pickups.js';
+
 export const GPSPEED = 10;
 
 /**
@@ -21,4 +24,5 @@ export function applyPremapExtras(board) {
     s.xrepeat = 0;
     s.yrepeat = 0;
   }
+  cullMultiplayerPickups(board);
 }

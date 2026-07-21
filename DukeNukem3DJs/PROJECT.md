@@ -53,7 +53,7 @@ If you are picking up this project with no chat history:
 5. Respect **§2–3** (SOLID + layers) before editing.
 6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (9/20–23/25 subway/27 bridges + switches). 4:3 presentation.
+**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (9/20–25/27) + **transporters (SE 7)** + **SEENINE/fan break** + **touch pickups** + switches. 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -67,7 +67,7 @@ If you are picking up this project with no chat history:
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor (ceilsprite) + maskwalls |
 | **P2** | Player movement + `clipmove` | Partial — walls + sprite clips + getzrange/pushmove |
-| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/bridges/switches; no actors/CON |
+| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/bridges/switches/pickups; no actors/CON |
 
 ---
 
@@ -262,7 +262,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started
 - [x] Player spawn from board (APLAYER / map header)
 - [x] WASD + turn look
 - [x] `clipmove` / `getzrange` / movement
-- [ ] Weapons, inventory, damage (Duke game)
+- [~] Weapons, inventory, damage (Duke game) — pistol + touch pickups subset
 - [ ] Actors (`ACTORS.C`), sector effects (`SECTOR.C`)
 - [ ] CON interpreter (`GAMEDEF.C`) as needed
 
@@ -293,7 +293,7 @@ Board load          ████████░░   ~85%   E1L1 + updatesector/
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
 Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
 drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceilsprite + maskwalls
-Duke play loop      ██████░░░░   ~65%   pistol + doors 9/20–25/27 + switches; no actors/CON
+Duke play loop      ██████░░░░   ~68%   pistol + doors 9/20–25/27 + switches + pickups; no actors/CON
 ```
 
 ### 12.2 Done well
@@ -309,8 +309,11 @@ Duke play loop      ██████░░░░   ~65%   pistol + doors 9/20�
 | Play tic | `game/Player.js`, `GetInput.js`, `ProcessInput.js` | Gravity, Space jump, Z/C crouch, friction + clipmove |
 | Pistol | `game/Weapons.js`, `render/WeaponHud.js` | Kickback, shoot spark, bulletholes, FIRSTGUN HUD |
 | Doors | `game/Operate.js`, `Animate.js`, `Effectors.js`, `engine/NearTag.js` | USE (E), lotag 9/20–23/25/27 + SE 11/15/20 |
+| Transporters | `game/Transporters.js` | SE lotag 7 (E1L1 roof → street) |
+| Pickups | `game/Pickups.js` | Touch ammo/weapons; SP cull pal≠0; GAME.C sprite setup |
+| SEENINE / fan | `game/Seenines.js` | E1L1 roof explosives + FANSPRITE break + SE 13 |
 | Switches | `game/Switches.js` | `checkhitswitch` + `operateactivators` subset |
-| Look around | `platform/input/Keyboard.js` | WASD + turn + mouse fire |
+| Look around | `platform/input/Keyboard.js` | WASD + turn + pointer-lock mouse look + LMB fire |
 
 ### 12.3 Missing / next
 
@@ -330,7 +333,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | P2 | `drawrooms` walls/floors | Partial | `DrawRooms.js`, `Grouscan.js`, `FlatScan.js` · `ENGINE.C` |
 | P2 | `clipmove` + player | Partial — walls + sprites + getzrange/pushmove | `ClipMove.js` · `ENGINE.C` |
 | P2 | Sprites / masks | Partial — face/wall/floor ceilsprite | `DrawMasks.js` · `ENGINE.C` `drawmasks` |
-| P3 | Duke play loop | Partial — processinput + pistol + doors/bridges/switches | `game/ProcessInput.js`, `Weapons.js`, `Operate.js`, `Effectors.js` |
+| P3 | Duke play loop | Partial — processinput + pistol + doors/bridges/switches/pickups | `game/ProcessInput.js`, `Weapons.js`, `Operate.js`, `Effectors.js`, `Pickups.js` |
 | P3 | Duke weapons / actors | Partial — pistol only; no CON actors | `ACTORS.C`, `PLAYER.C` |
 
 ---
@@ -345,6 +348,8 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | Duke play tic (jump/crouch/gravity) | `game/ProcessInput.js`, `game/Player.js`, `app/Game.js` |
 | Pistol / hitscan | `game/Weapons.js`, `engine/Hitscan.js`, `render/WeaponHud.js` |
 | Doors / USE / switches | `game/Operate.js`, `Animate.js`, `Effectors.js`, `Switches.js`, `Premap.js`, `engine/NearTag.js`, `WallGeom.js` |
+| Touch pickups | `game/Pickups.js` · GAME.CON / GAME.C spawn |
+| SEENINE / fan break | `game/Seenines.js` · ACTORS.C / SECTOR.C |
 | Wire startup | `main.js` |
 | Screen size constants | `core/renderConstants.js` |
 | Timer / tic constants | `core/gameConstants.js` |
@@ -393,7 +398,7 @@ When unsure how something should work: open the C file in `BuildEngine/src/` or 
 cd "DukeNukem3DJs"
 python -m http.server 8080
 # → http://localhost:8080
-# Controls: WASD move · ←→ or Q turn · E use/open · Space jump · Z/C crouch · Ctrl or LMB fire (click page first for focus)
+# Controls: WASD move · ←→ or Q turn · mouse look (click canvas) · R/F or PgUp/PgDn look · Home center · E use/open · Space jump · Z/C crouch · Ctrl or LMB fire
 ```
 
 User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is implemented. Do not commit commercial game data.
@@ -453,6 +458,10 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-21 | Gun sway: `bobcounter` → `weapon_sway` + horizontal `weapon_xoffset` |
 | 2026-07-21 | Swing doors (lotag 23 / SE 11): `rotatepoint`/`dragpoint`, `msx`/`msy`, `moveSwingDoors` |
 | 2026-07-21 | Subway slides (25/SE15) + bridges (27/SE20); PREMAP `GPSPEED` → `sector.extra` |
+| 2026-07-21 | Transporters (SE 7): E1L1 cinema-roof shaft warp to street |
+| 2026-07-21 | Touch pickups (AMMO/weapons) + SP pal≠0 cull; E1L1 roof exit is shaft fall not barrels |
+| 2026-07-21 | SEENINE explosives + FANSPRITE break (E1L1 roof); pickup foot-z dist + sprite setup |
+| 2026-07-21 | Fix hard-landing look (return_to_center); pointer-lock mouse look + R/F pitch |
 
 ---
 

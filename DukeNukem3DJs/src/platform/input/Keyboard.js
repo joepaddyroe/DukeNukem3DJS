@@ -1,14 +1,23 @@
 /**
- * Keyboard + mouse button state for look / move / fire (platform layer).
+ * Keyboard + mouse look / fire (platform layer).
+ * Pointer-lock mouse look: click canvas to capture, Esc to release.
  */
 export class Keyboard {
-  constructor() {
+  /**
+   * @param {HTMLElement} [lockTarget] element to requestPointerLock on click
+   */
+  constructor(lockTarget = null) {
     /** @type {Set<string>} */
     this.down = new Set();
     /** @type {Set<string>} */
     this.pressed = new Set();
     /** @type {Set<number>} */
     this.mouseDown = new Set();
+    /** Accumulated movement since last consume (pixels). */
+    this.mouseDX = 0;
+    this.mouseDY = 0;
+    /** @type {HTMLElement|null} */
+    this._lockTarget = lockTarget;
 
     this._onDown = (e) => {
       if (!this.down.has(e.code)) {
@@ -28,11 +37,16 @@ export class Keyboard {
         e.code === 'KeyE' ||
         e.code === 'KeyZ' ||
         e.code === 'KeyC' ||
+        e.code === 'KeyR' ||
+        e.code === 'KeyF' ||
         e.code === 'Space' ||
         e.code === 'ControlLeft' ||
         e.code === 'ControlRight' ||
         e.code === 'ShiftLeft' ||
         e.code === 'ShiftRight' ||
+        e.code === 'PageUp' ||
+        e.code === 'PageDown' ||
+        e.code === 'Home' ||
         e.code === 'Digit1' ||
         e.code === 'Digit2' ||
         e.code === 'Digit3'
@@ -45,10 +59,23 @@ export class Keyboard {
     };
     this._onMouseDown = (e) => {
       this.mouseDown.add(e.button);
+      if (
+        this._lockTarget &&
+        e.button === 0 &&
+        document.pointerLockElement !== this._lockTarget
+      ) {
+        this._lockTarget.requestPointerLock?.();
+      }
       e.preventDefault();
     };
     this._onMouseUp = (e) => {
       this.mouseDown.delete(e.button);
+    };
+    this._onMouseMove = (e) => {
+      if (document.pointerLockElement) {
+        this.mouseDX += e.movementX || 0;
+        this.mouseDY += e.movementY || 0;
+      }
     };
     this._onContext = (e) => {
       e.preventDefault();
@@ -58,6 +85,7 @@ export class Keyboard {
     window.addEventListener('keyup', this._onUp);
     window.addEventListener('mousedown', this._onMouseDown);
     window.addEventListener('mouseup', this._onMouseUp);
+    window.addEventListener('mousemove', this._onMouseMove);
     window.addEventListener('contextmenu', this._onContext);
   }
 
@@ -75,6 +103,23 @@ export class Keyboard {
   }
 
   /**
+   * Consume and return accumulated mouse delta, then zero it.
+   * @returns {{ dx: number, dy: number }}
+   */
+  consumeMouseDelta() {
+    const dx = this.mouseDX;
+    const dy = this.mouseDY;
+    this.mouseDX = 0;
+    this.mouseDY = 0;
+    return { dx, dy };
+  }
+
+  /** @returns {boolean} */
+  hasPointerLock() {
+    return !!document.pointerLockElement;
+  }
+
+  /**
    * True once per keydown until consumed (edge-triggered).
    * @param {string} code
    */
@@ -89,6 +134,7 @@ export class Keyboard {
     window.removeEventListener('keyup', this._onUp);
     window.removeEventListener('mousedown', this._onMouseDown);
     window.removeEventListener('mouseup', this._onMouseUp);
+    window.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('contextmenu', this._onContext);
   }
 }

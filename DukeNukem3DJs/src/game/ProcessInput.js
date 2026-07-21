@@ -7,7 +7,7 @@ import { BUILD_ANGLE_MASK } from '../core/renderConstants.js';
 import { clipmove, pushmove, getzrange, CLIPMASK0 } from '../engine/ClipMove.js';
 import { klabs, mulscale, nsqrtasm } from '../math/fixed.js';
 import { buildTables } from '../math/BuildTables.js';
-import { BIT_CROUCH, BIT_JUMP } from './GetInput.js';
+import { BIT_CROUCH, BIT_JUMP, BIT_LOOK_UP, BIT_LOOK_DOWN, BIT_CENTER_VIEW } from './GetInput.js';
 
 /** USER.CON GRAVITATIONALCONSTANT */
 export const GC = 176;
@@ -31,7 +31,7 @@ function ksgn(a) {
  * @param {import('./Player.js').Player} p
  * @param {import('../engine/Board.js').Board} board
  * @param {import('../grp/ArtTiles.js').ArtTiles|null} art
- * @param {{ fvel: number, svel: number, avel: number, bits: number }} sync
+ * @param {{ fvel: number, svel: number, avel: number, bits: number, horz?: number }} sync
  */
 export function processInput(p, board, art, sync) {
   if (!board || p.cursectnum < 0) return;
@@ -246,4 +246,43 @@ export function processInput(p, board, art, sync) {
 
   p.bobposx = p.posx;
   p.bobposy = p.posy;
+
+  // --- look / hard landing (PLAYER.C ~3280) ---
+  if ((sb & BIT_CENTER_VIEW) || (p.hard_landing | 0)) {
+    p.return_to_center = 9;
+  }
+
+  const lookingHeld = (sb & (BIT_LOOK_UP | BIT_LOOK_DOWN)) !== 0;
+  if (sb & BIT_LOOK_UP) {
+    p.return_to_center = 9;
+    p.horiz = (p.horiz | 0) + 12;
+  } else if (sb & BIT_LOOK_DOWN) {
+    p.return_to_center = 9;
+    p.horiz = (p.horiz | 0) - 12;
+  }
+
+  // Mouse pitch (aim_mode-style: sync.horz >> 1)
+  const horz = sync.horz | 0;
+  if (horz) {
+    p.horiz = (p.horiz | 0) + (horz >> 1);
+    p.return_to_center = 0;
+  }
+
+  if ((p.return_to_center | 0) > 0 && !lookingHeld && !horz) {
+    p.return_to_center--;
+    p.horiz = (p.horiz | 0) + (33 - (((p.horiz | 0) / 3) | 0));
+  }
+
+  if ((p.hard_landing | 0) > 0) {
+    p.hard_landing--;
+    p.horiz = (p.horiz | 0) - ((p.hard_landing | 0) << 4);
+  }
+
+  // Snap near center when not free-looking with mouse
+  if (!horz) {
+    if ((p.horiz | 0) > 95 && (p.horiz | 0) < 105) p.horiz = 100;
+  }
+
+  if ((p.horiz | 0) > 299) p.horiz = 299;
+  else if ((p.horiz | 0) < -99) p.horiz = -99;
 }

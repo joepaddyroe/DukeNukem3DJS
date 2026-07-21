@@ -9,6 +9,9 @@ import { processWeapon, pistolHudTiles, PISTOL_WEAPON } from '../game/Weapons.js
 import { processUse } from '../game/Operate.js';
 import { doAnimations, clearAnimations } from '../game/Animate.js';
 import { initEffectors, moveEffectors } from '../game/Effectors.js';
+import { initTransporters, processTransporters } from '../game/Transporters.js';
+import { processPickups } from '../game/Pickups.js';
+import { initSeenines, processSeenines } from '../game/Seenines.js';
 
 export class Game {
   /**
@@ -32,7 +35,11 @@ export class Game {
     const rooms = this.renderer.drawRooms;
     if (!rooms) return;
     clearAnimations();
-    if (rooms.board) initEffectors(rooms.board);
+    if (rooms.board) {
+      initEffectors(rooms.board);
+      initTransporters(rooms.board);
+      initSeenines(rooms.board);
+    }
     this.player.resetFromCamera(rooms);
     this._playerReady = true;
   }
@@ -68,8 +75,11 @@ export class Game {
     processInput(this.player, rooms.board, rooms.art, sync);
     processWeapon(this.player, rooms.board, rooms.art, sync);
     processUse(this.player, rooms.board, rooms.art, sync);
+    processPickups(rooms.board, this.player);
     doAnimations(rooms.board, this.player);
     moveEffectors(rooms.board, this.player);
+    processSeenines(rooms.board);
+    processTransporters(rooms.board, this.player);
     this.player.applyToCamera(rooms);
     rooms.setPlayDebug({
       on_ground: this.player.on_ground,

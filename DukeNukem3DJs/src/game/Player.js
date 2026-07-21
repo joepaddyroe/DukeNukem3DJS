@@ -23,6 +23,11 @@ export class Player {
     this.falling_counter = 0;
     this.hard_landing = 0;
     this.spritebridge = 0;
+    this.on_warping_sector = 0;
+    this.transporter_hold = 0;
+
+    /** PLAYER.C return_to_center — snap horiz back after look / hard landing */
+    this.return_to_center = 0;
 
     /** Input turn hold timer (PLAYER.C turnheldtime). */
     this.turnheldtime = 0;
@@ -75,6 +80,9 @@ export class Player {
     this.falling_counter = 0;
     this.hard_landing = 0;
     this.spritebridge = 0;
+    this.on_warping_sector = 0;
+    this.transporter_hold = 0;
+    this.return_to_center = 0;
     this.turnheldtime = 0;
     this.kickback_pic = 0;
     this.weapon_pos = 0;

@@ -10,7 +10,7 @@ import { loadboardFromFs } from './engine/BoardLoader.js';
 import { Keyboard } from './platform/input/Keyboard.js';
 import { buildTables } from './math/BuildTables.js';
 
-const BUILD_TAG = '2026-07-21-subwaybridge';
+const BUILD_TAG = '2026-07-21-mouselook';
 const GRP_PATHS = ['./assets/DUKE3D.GRP', './DUKE3D.GRP'];
 const MAP_NAME = 'E1L1.MAP';
 
@@ -29,7 +29,7 @@ if (!(canvas instanceof HTMLCanvasElement)) {
 const output = new CanvasVideoOutput(canvas);
 const renderer = new SoftwareRenderer();
 renderer.setview(0, 0, renderer.screenWidth - 1, renderer.screenHeight - 1);
-renderer.setKeyboard(new Keyboard());
+renderer.setKeyboard(new Keyboard(canvas));
 
 const debugEl = document.createElement('pre');
 debugEl.id = 'debug';

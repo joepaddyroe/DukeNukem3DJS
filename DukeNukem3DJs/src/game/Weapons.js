@@ -6,6 +6,7 @@ import { getangle } from '../engine/ClipMove.js';
 import { buildTables } from '../math/BuildTables.js';
 import { insertSprite } from './Spawn.js';
 import { BIT_FIRE } from './GetInput.js';
+import { checkHitSprite } from './Seenines.js';
 
 export const PISTOL_WEAPON = 1;
 export const FIRSTGUN = 2524;
@@ -138,9 +139,10 @@ function shootPistol(p, board, art) {
   }
 
   if (hit.hitsprite >= 0) {
+    if (checkHitSprite(board, hit.hitsprite)) return;
     const spr = board.sprites[hit.hitsprite];
     if (spr && spr.extra > 0) spr.extra -= 6;
-    spr.shade = -32;
+    if (spr) spr.shade = -32;
     return;
   }
 

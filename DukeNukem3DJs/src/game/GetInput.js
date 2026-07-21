@@ -1,5 +1,5 @@
 /**
- * PLAYER.C getinput subset — keyboard → sync loc (fvel/svel world mom, avel, bits).
+ * PLAYER.C getinput subset — keyboard + mouse → sync loc.
  */
 import { mulscale9 } from '../math/fixed.js';
 import { buildTables } from '../math/BuildTables.js';
@@ -18,14 +18,23 @@ const MAXANGVEL = 127;
 export const BIT_JUMP = 1;
 export const BIT_CROUCH = 2;
 export const BIT_FIRE = 4;
+/** Look up / down (PLAYER.C bits 13 / 14). */
+export const BIT_LOOK_UP = 1 << 13;
+export const BIT_LOOK_DOWN = 1 << 14;
+/** Center view (PLAYER.C bit 18). */
+export const BIT_CENTER_VIEW = 1 << 18;
 /** PLAYER.C loc.bits bit 29 — Open / USE */
 export const BIT_OPEN = 1 << 29;
+
+/** Mouse → ang / horiz scale (pixels per tic). */
+const MOUSE_TURN_SCALE = 0.35;
+const MOUSE_LOOK_SCALE = 0.45;
 
 /**
  * @param {import('../platform/input/Keyboard.js').Keyboard} kb
  * @param {import('./Player.js').Player} player
  * @param {{ autoRun?: boolean }} [opts]
- * @returns {{ fvel: number, svel: number, avel: number, bits: number }}
+ * @returns {{ fvel: number, svel: number, avel: number, bits: number, horz: number }}
  */
 export function getInput(kb, player, opts = {}) {
   const autoRun = opts.autoRun !== false;
@@ -45,6 +54,11 @@ export function getInput(kb, player, opts = {}) {
   // E = Open/USE (turn stays on arrows + Q)
   if (kb.isDown('KeyE')) bits |= BIT_OPEN;
 
+  // Look up / down — PageUp/Down or R/F
+  if (kb.isDown('PageUp') || kb.isDown('KeyR')) bits |= BIT_LOOK_UP;
+  if (kb.isDown('PageDown') || kb.isDown('KeyF')) bits |= BIT_LOOK_DOWN;
+  if (kb.isDown('Home')) bits |= BIT_CENTER_VIEW;
+
   let turnamount;
   let keymove;
   if (running) {
@@ -58,6 +72,7 @@ export function getInput(kb, player, opts = {}) {
   let vel = 0;
   let svel = 0;
   let angvel = 0;
+  let horz = 0;
 
   if (kb.isDown('KeyW') || kb.isDown('ArrowUp')) vel += keymove;
   if (kb.isDown('KeyS') || kb.isDown('ArrowDown')) vel -= keymove;
@@ -76,12 +91,22 @@ export function getInput(kb, player, opts = {}) {
     player.turnheldtime = 0;
   }
 
+  // Pointer-lock mouse look
+  const { dx, dy } = kb.consumeMouseDelta();
+  if (dx || dy) {
+    angvel += dx * MOUSE_TURN_SCALE;
+    // Mouse forward = look up (increase horiz), matching typical FPS
+    horz -= dy * MOUSE_LOOK_SCALE;
+  }
+
   if (vel < -MAXVEL) vel = -MAXVEL;
   if (vel > MAXVEL) vel = MAXVEL;
   if (svel < -MAXSVEL) svel = -MAXSVEL;
   if (svel > MAXSVEL) svel = MAXSVEL;
   if (angvel < -MAXANGVEL) angvel = -MAXANGVEL;
   if (angvel > MAXANGVEL) angvel = MAXANGVEL;
+  if (horz < -127) horz = -127;
+  if (horz > 127) horz = 127;
 
   if (!buildTables.loaded) buildTables.generateFallback();
   const daang = player.ang & BUILD_ANGLE_MASK;
@@ -98,5 +123,6 @@ export function getInput(kb, player, opts = {}) {
     svel: momy | 0,
     avel: angvel | 0,
     bits: bits | 0,
+    horz: horz | 0,
   };
 }
