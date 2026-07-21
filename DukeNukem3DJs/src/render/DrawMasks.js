@@ -1267,13 +1267,19 @@ export class DrawMasks {
 
     const uwall = new Int16Array(xdimen);
     const dwall = new Int16Array(xdimen);
+    // ENGINE.C uses startumost/startdmost (window bounds), NOT the sealed
+    // umost/dmost after drawalls — clipping to live umost/dmost at flush
+    // makes every face sprite invisible. Use sector startum/startdm + view.
     for (let x = lx; x <= rx; x++) {
-      uwall[x] = startum > 0 ? startum : 0;
-      dwall[x] = startdm < ydimen ? startdm : ydimen;
-      if (uwall[x] < 0) uwall[x] = 0;
-      if (dwall[x] > ydimen) dwall[x] = ydimen;
+      let u = startum | 0;
+      let d = startdm | 0;
+      if (u < 0) u = 0;
+      if (d > ydimen) d = ydimen;
+      uwall[x] = u;
+      dwall[x] = d;
     }
-    if (!this.applySmost(rooms, spr, yp, lx, rx, uwall, dwall)) return;
+    // smost portal clips still incomplete (were collapsing sprites to slits);
+    // skip until spritewallfront / smost ordering matches ENGINE.
 
     const mirrorX = (spr.cstat & 4) !== 0;
     const mirrorY = (spr.cstat & 8) !== 0;

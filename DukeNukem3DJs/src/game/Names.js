@@ -40,6 +40,22 @@ export const BOOTS = 61;
 export const HOLODUKE = 1348;
 export const ATOMICHEALTH = 100;
 
+/** Projectiles / enemies (NAMES.H) */
+export const FIRELASER = 1625;
+export const LIZTROOP = 1680;
+export const LIZTROOPRUNNING = 1681;
+export const LIZTROOPSTAYPUT = 1682;
+export const LIZTROOPSHOOT = 1715;
+export const LIZTROOPJETPACK = 1725;
+export const LIZTROOPDSPRITE = 1734;
+export const LIZTROOPONTOILET = 1741;
+export const LIZTROOPJUSTSIT = 1742;
+export const LIZTROOPDUCKING = 1744;
+export const PIGCOP = 2000;
+export const PIGCOPSTAYPUT = 2001;
+export const PIGCOPDIVE = 2045;
+export const PIGCOPDEADSPRITE = 2060;
+
 /** Breakables / E1L1 roof (NAMES.H) */
 export const FANSPRITE = 407;
 export const FANSPRITEBROKE = 411;

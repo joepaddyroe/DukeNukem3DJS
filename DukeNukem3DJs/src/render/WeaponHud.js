@@ -67,6 +67,63 @@ export function blitTileCentered(buffer, art, cx, cy, tilenum) {
 }
 
 /**
+ * Top-left blit with classic bit-1 translucence (checkerboard).
+ * @param {import('./ViewBuffer.js').ViewBuffer} buffer
+ * @param {import('../grp/ArtTiles.js').ArtTiles} art
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} tilenum
+ */
+export function blitTileTrans(buffer, art, x0, y0, tilenum) {
+  const pixels = art.loadtile(tilenum);
+  if (!pixels) return;
+  const xsiz = art.tilesizx[tilenum] | 0;
+  const ysiz = art.tilesizy[tilenum] | 0;
+  if (xsiz <= 0 || ysiz <= 0) return;
+
+  const { pixels: dest, ylookup, windowx1, windowx2, windowy1, windowy2 } =
+    buffer;
+  const ox = x0 | 0;
+  const oy = y0 | 0;
+
+  for (let x = 0; x < xsiz; x++) {
+    const sx = (ox + x) | 0;
+    if (sx < windowx1 || sx > windowx2) continue;
+    const col = pixels.subarray(x * ysiz, x * ysiz + ysiz);
+    for (let y = 0; y < ysiz; y++) {
+      const sy = (oy + y) | 0;
+      if (sy < windowy1 || sy > windowy2) continue;
+      if (((sx ^ sy) & 1) === 0) continue;
+      const c = col[y];
+      if (c === 255) continue;
+      dest[ylookup[sy] + sx] = c;
+    }
+  }
+}
+
+/**
+ * Centered translucent blit (rotatesprite flags 2+1).
+ * @param {import('./ViewBuffer.js').ViewBuffer} buffer
+ * @param {import('../grp/ArtTiles.js').ArtTiles} art
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} tilenum
+ */
+export function blitTileCenteredTrans(buffer, art, cx, cy, tilenum) {
+  const pixels = art.loadtile(tilenum);
+  if (!pixels) return;
+  const xsiz = art.tilesizx[tilenum] | 0;
+  const ysiz = art.tilesizy[tilenum] | 0;
+  if (xsiz <= 0 || ysiz <= 0) return;
+
+  const picanm = art.picanm[tilenum] | 0;
+  const xoff = (s8((picanm >> 8) & 255) + (xsiz >> 1)) | 0;
+  const yoff = (s8((picanm >> 16) & 255) + (ysiz >> 1)) | 0;
+
+  blitTileTrans(buffer, art, (cx - xoff) | 0, (cy - yoff) | 0, tilenum);
+}
+
+/**
  * GAME.C digitalnumber — centered digit string using DIGITALNUM tiles.
  * @param {import('./ViewBuffer.js').ViewBuffer} buffer
  * @param {import('../grp/ArtTiles.js').ArtTiles} art

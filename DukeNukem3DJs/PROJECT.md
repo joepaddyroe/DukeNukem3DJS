@@ -53,7 +53,7 @@ If you are picking up this project with no chat history:
 5. Respect **§2–3** (SOLID + layers) before editing.
 6. After completing work, update **§12**, **§7**, and **§15 Changelog**, then **sync both READMEs** (see **README sync** above).
 
-**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (9/20–25/27) + **transporters (SE 7)** + **SEENINE/fan break** + **touch pickups** + **status bar / inventory** + switches. 4:3 presentation.
+**Current maturity (2026-07-21):** Loads `DUKE3D.GRP` + ART + palette; **`loadboard(E1L1.MAP)`** + Build-style **bunch `drawrooms`**. Face/wall/floor **`drawmasks`** + maskwalls. **`clipmove`**. Duke play tic + **pistol** + **doors** (9/20–25/27) + **transporters (SE 7)** + **SEENINE/fan break** + **touch pickups** + **status bar / inventory** + **LIZTROOP/PIGCOP actors** + switches. 4:3 presentation.
 
 ### Remaining tasks (priority order)
 
@@ -67,7 +67,7 @@ If you are picking up this project with no chat history:
 | **P2** | Parallax sky (`parascan`) | Partial — LA psky + radarang2 + parallaxyscale V |
 | **P2** | `drawmasks` sprites | Partial — face/wall/floor (ceilsprite) + maskwalls |
 | **P2** | Player movement + `clipmove` | Partial — walls + sprite clips + getzrange/pushmove |
-| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/bridges/switches/pickups/HUD; no actors/CON |
+| **P3** | Duke play loop | Partial — gravity/jump/crouch + pistol + doors/bridges/switches/pickups/HUD + troop/pig AI; no CON |
 
 ---
 
@@ -262,8 +262,8 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started
 - [x] Player spawn from board (APLAYER / map header)
 - [x] WASD + turn look
 - [x] `clipmove` / `getzrange` / movement
-- [~] Weapons, inventory, damage (Duke game) — pistol + touch pickups + inventory strip
-- [ ] Actors (`ACTORS.C`), sector effects (`SECTOR.C`)
+- [~] Weapons, inventory, damage (Duke game) — pistol + touch pickups + inventory strip + enemy HP
+- [~] Actors (`ACTORS.C`), sector effects (`SECTOR.C`) — LIZTROOP/PIGCOP subset (no CON)
 - [ ] CON interpreter (`GAMEDEF.C`) as needed
 
 ### Phase 5 — UI / meta
@@ -293,7 +293,7 @@ Board load          ████████░░   ~85%   E1L1 + updatesector/
 Build drawrooms     ████████░░   ~80%   bunch scansector/drawalls; wallmost approx
 Player / clipmove   ████████░░   ~80%   walls+sprites clipmove/getzrange/pushmove
 drawmasks sprites   ███████░░░   ~70%   face/wall/floor ceilsprite + maskwalls
-Duke play loop      ███████░░░   ~72%   pistol + doors + pickups + status bar; no actors/CON
+Duke play loop      ████████░░   ~78%   pistol + doors + pickups + HUD + troop/pig AI; no CON
 ```
 
 ### 12.2 Done well
@@ -312,13 +312,14 @@ Duke play loop      ███████░░░   ~72%   pistol + doors + pic
 | Transporters | `game/Transporters.js` | SE lotag 7 (E1L1 roof → street) |
 | Pickups | `game/Pickups.js`, `SpawnSetup.js` | Weapons/ammo/health/inv; floor snap; access-card pal; hide SE markers |
 | Status bar | `render/StatusBar.js`, `WeaponHud.js` | BOTTOMSTATUSBAR + ammo/HP/armor + inventory `[`/`]` |
+| Actors | `game/Actors.js`, `engine/CanSee.js` | E1L1 LIZTROOP/PIGCOP: wake/seek/shoot/die + FIRELASER |
 | SEENINE / fan | `game/Seenines.js` | E1L1 roof explosives + FANSPRITE break + SE 13 |
 | Switches | `game/Switches.js` | `checkhitswitch` + `operateactivators` subset |
 | Look around | `platform/input/Keyboard.js` | WASD + turn + pointer-lock mouse look + LMB fire |
 
 ### 12.3 Missing / next
 
-Actors / CON; elevators 15–19; other weapons; water/jetpack; sounds.
+Actors / CON (full); elevators 15–19; other weapons; water/jetpack; sounds.
 
 ---
 
@@ -351,6 +352,7 @@ Goal: **visible Build map render** before deep Duke gameplay.
 | Doors / USE / switches | `game/Operate.js`, `Animate.js`, `Effectors.js`, `Switches.js`, `Premap.js`, `engine/NearTag.js`, `WallGeom.js` |
 | Touch pickups | `game/Pickups.js`, `SpawnSetup.js` · GAME.CON / GAME.C spawn |
 | Status bar / inventory | `render/StatusBar.js` · GAME.C displayrest |
+| Enemies (troop/pig) | `game/Actors.js`, `engine/CanSee.js` · ACTORS.C / GAME.C spawn |
 | SEENINE / fan break | `game/Seenines.js` · ACTORS.C / SECTOR.C |
 | Wire startup | `main.js` |
 | Screen size constants | `core/renderConstants.js` |
@@ -466,6 +468,7 @@ User supplies a legally obtained GRP (e.g. `DUKE3D.GRP`) when asset loading is i
 | 2026-07-21 | Fix hard-landing look (return_to_center); pointer-lock mouse look + R/F pitch |
 | 2026-07-21 | Spawn setup: hide system markers, fix item/maskwall sprites; expand health/inv pickups |
 | 2026-07-21 | Status bar + inventory HUD; pickup floor snap; start ammo 48; `[`/`]` inventory cycle |
+| 2026-07-21 | Entities: LIZTROOP/PIGCOP spawn + seek/shoot/die AI; FIRELASER; pistol damage |
 
 ---
 

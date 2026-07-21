@@ -2,7 +2,12 @@
  * GAME.C status bar subset — BOTTOMSTATUSBAR + digital numbers + inventory icons.
  * Uses mini-bar layout (screen_size == 4) with full bar backdrop for clarity.
  */
-import { blitTile, blitTileCentered, digitalNumber } from './WeaponHud.js';
+import {
+  blitTile,
+  blitTileCentered,
+  blitTileCenteredTrans,
+  digitalNumber,
+} from './WeaponHud.js';
 
 export const BOTTOMSTATUSBAR = 2462;
 export const HEALTHBOX = 30;
@@ -18,6 +23,8 @@ export const STEROIDS_ICON = 2469;
 export const HOLODUKE_ICON = 2470;
 export const ACCESS_ICON = 2471;
 export const ARROW = 20;
+/** NAMES.H — GAME.C displayrest crosshair */
+export const CROSSHAIR = 2523;
 
 /** inven_icon → HUD tile */
 const INVEN_ICONS = [
@@ -72,6 +79,20 @@ export function drawStatusBar(buffer, art, p) {
   if ((p.invdisptime | 0) > 0) {
     drawInventoryStrip(buffer, art, p);
   }
+
+  // GAME.C displayrest — after gauges, translucent CROSSHAIR at view center
+  drawCrosshair(buffer, art, p);
+}
+
+/**
+ * GAME.C: rotatesprite(160-(look_ang>>1), 100, …, CROSSHAIR, …, 2+1)
+ * @param {import('./ViewBuffer.js').ViewBuffer} buffer
+ * @param {import('../grp/ArtTiles.js').ArtTiles} art
+ * @param {import('../game/Player.js').Player} p
+ */
+export function drawCrosshair(buffer, art, p) {
+  const look = (p.look_ang | 0) >> 1;
+  blitTileCenteredTrans(buffer, art, 160 - look, 100, CROSSHAIR);
 }
 
 /**

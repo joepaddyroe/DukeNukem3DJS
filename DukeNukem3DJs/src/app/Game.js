@@ -12,6 +12,7 @@ import { initEffectors, moveEffectors } from '../game/Effectors.js';
 import { initTransporters, processTransporters } from '../game/Transporters.js';
 import { processPickups } from '../game/Pickups.js';
 import { initSeenines, processSeenines } from '../game/Seenines.js';
+import { initActors, processActors } from '../game/Actors.js';
 
 export class Game {
   /**
@@ -39,6 +40,7 @@ export class Game {
       initEffectors(rooms.board);
       initTransporters(rooms.board);
       initSeenines(rooms.board);
+      initActors(rooms.board);
     }
     this.player.resetFromCamera(rooms);
     this._playerReady = true;
@@ -79,6 +81,7 @@ export class Game {
     doAnimations(rooms.board, this.player);
     moveEffectors(rooms.board, this.player);
     processSeenines(rooms.board);
+    processActors(rooms.board, this.player, rooms.art);
     processTransporters(rooms.board, this.player);
     this.player.applyToCamera(rooms);
     rooms.setPlayDebug({

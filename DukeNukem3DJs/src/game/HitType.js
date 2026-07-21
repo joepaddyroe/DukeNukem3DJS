@@ -7,6 +7,10 @@ export const MAX_MS = 2048;
 /**
  * @typedef {{
  *   temp_data: number[],
+ *   actorstayput: number,
+ *   floorz: number,
+ *   ceilingz: number,
+ *   timetosleep: number,
  * }} HitType
  */
 
@@ -19,10 +23,20 @@ export const msy = new Int32Array(MAX_MS);
 
 let tempwallptr = 0;
 
+function blankHit() {
+  return {
+    temp_data: [0, 0, 0, 0, 0, 0],
+    actorstayput: -1,
+    floorz: 0,
+    ceilingz: 0,
+    timetosleep: 0,
+  };
+}
+
 export function clearHitTypes(numsprites) {
   hittype.length = 0;
   for (let i = 0; i < (numsprites | 0); i++) {
-    hittype.push({ temp_data: [0, 0, 0, 0, 0, 0] });
+    hittype.push(blankHit());
   }
   tempwallptr = 0;
   msx.fill(0);
@@ -45,7 +59,12 @@ export function setTempWallPtr(v) {
  */
 export function ensureHitType(i) {
   while (hittype.length <= i) {
-    hittype.push({ temp_data: [0, 0, 0, 0, 0, 0] });
+    hittype.push(blankHit());
   }
-  return hittype[i];
+  const ht = hittype[i];
+  if (ht.actorstayput === undefined) ht.actorstayput = -1;
+  if (ht.floorz === undefined) ht.floorz = 0;
+  if (ht.ceilingz === undefined) ht.ceilingz = 0;
+  if (ht.timetosleep === undefined) ht.timetosleep = 0;
+  return ht;
 }

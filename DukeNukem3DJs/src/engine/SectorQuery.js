@@ -78,7 +78,11 @@ export const APLAYER = 1405;
  * @returns {{ ceilz: number, florz: number }}
  */
 export function getzsofslope(board, sectnum, dax, day) {
+  if (!board || sectnum < 0 || sectnum >= board.numsectors) {
+    return { ceilz: 0, florz: 0 };
+  }
   const sec = board.sectors[sectnum];
+  if (!sec) return { ceilz: 0, florz: 0 };
   let ceilz = sec.ceilingz;
   let florz = sec.floorz;
   if (((sec.ceilingstat | sec.floorstat) & 2) === 0) {
